@@ -155,11 +155,16 @@ public:
     // Here we calculate de distances between the 6 points calculated with the algotim vs the 6 first point after H
     void addFixed_marks(std::vector<cv::Point3f> imagePoints_aux, std::vector<cv::Point3f> drawnPoints, cv::Mat& fout_fixed, cv::Mat visualizedMask);
 
-    std::tuple<int,std::string, std::vector<PointWithContour> > getMarksAutomatic(std::string email,std::string screenshot);
+    std::tuple<int,std::string, std::vector<PointWithContour>, std::string, int, int > getMarksAutomatic(std::string screenshot);
 
-    std::pair<int,std::string> getMarksSemiAutomatic(std::string email,std::string screenshot);
+    std::tuple<int,std::string ,std::vector<PointWithContour>, std::string, int, int > getMarksSemiAutomatic(std::string screenshot,
+                                                double mark1_x, double mark1_y,
+                                                double mark2_x, double mark2_y,
+                                                double mark3_x, double mark3_y,
+                                                double mark4_x, double mark4_y,
+                                                double mark5_x, double mark5_y,
+                                                double mark6_x, double mark6_y);
+
 };
-
-
 
 #endif

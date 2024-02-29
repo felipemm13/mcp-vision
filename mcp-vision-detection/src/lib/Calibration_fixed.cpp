@@ -1021,7 +1021,7 @@ void Calibration_fixed::addFixed_marks(std::vector<cv::Point3f> imagePoints_aux,
 }
 
 
-std::tuple<int,std::string ,std::vector<PointWithContour> > Calibration_fixed::getMarksAutomatic(std::string email,std::string screenshot){
+std::tuple<int,std::string ,std::vector<PointWithContour>, std::string, int, int > Calibration_fixed::getMarksAutomatic(std::string screenshot){
     try{
     ///Process automatic calibration
     std::chrono::steady_clock::time_point ebegin = std::chrono::steady_clock::now();
@@ -1798,15 +1798,424 @@ std::tuple<int,std::string ,std::vector<PointWithContour> > Calibration_fixed::g
         cv::imshow("Fixed con contornos", fout_final);
         std::chrono::steady_clock::time_point eend1 = std::chrono::steady_clock::now();
         std::cout << "Calibrated Scene time = " << std::chrono::duration_cast<std::chrono::seconds>(eend1 - ebegin).count() << "[s]" << std::endl;
-        std::chrono::steady_clock::time_point ebegin2 = std::chrono::steady_clock::now();
         cv::waitKey(0);
     #endif
 
-    return std::tuple<int, std::string, std::vector<PointWithContour>>(0, "{\"state\":\"success\"}", final_points_contour);
+    ImagemConverter Converter = ImagemConverter();
+    std::string H_base64 = Converter.mat2str(H);
+
+    return std::tuple<int, std::string, std::vector<PointWithContour>, std::string, int, int> (0, "{\"state\":\"success\"}", final_points_contour, H_base64, calib_w, calib_h);
     
     }catch(std::string JSON){
-        
+        std::string H_base64;
         std::vector<PointWithContour> final_points_contour;
-        return std::tuple<int, std::string, std::vector<PointWithContour>>(-1,"{\"state\":\"error\"}", final_points_contour);
+        int calib_w; int calib_h;
+        return std::tuple<int, std::string, std::vector<PointWithContour>, std::string, int, int> (-1, "{\"state\":\"error\"}", final_points_contour, H_base64, calib_w, calib_h);
+    }
+}
+
+
+std::tuple<int,std::string ,std::vector<PointWithContour>, std::string, int, int > Calibration_fixed::getMarksSemiAutomatic(std::string screenshot,
+                                                        double mark1_x, double mark1_y,
+                                                        double mark2_x, double mark2_y,
+                                                        double mark3_x, double mark3_y,
+                                                        double mark4_x, double mark4_y,
+                                                        double mark5_x, double mark5_y,
+                                                        double mark6_x, double mark6_y) {
+
+    try{
+    ///Process automatic calibration
+    std::chrono::steady_clock::time_point ebegin = std::chrono::steady_clock::now();
+
+    std::cout << "Marca 1: X = " << mark1_x << ", Y = " << mark1_y << std::endl;
+    std::cout << "Marca 2: X = " << mark2_x << ", Y = " << mark2_y << std::endl;
+    std::cout << "Marca 3: X = " << mark3_x << ", Y = " << mark3_y << std::endl;
+    std::cout << "Marca 4: X = " << mark4_x << ", Y = " << mark4_y << std::endl;
+    std::cout << "Marca 5: X = " << mark5_x << ", Y = " << mark5_y << std::endl;
+    std::cout << "Marca 6: X = " << mark6_x << ", Y = " << mark6_y << std::endl;
+
+    ImagemConverter test = ImagemConverter();
+    std::string base64_imageFromApp = screenshot.erase(0,23);
+    cv::Mat current, M, M1 = test.str2mat(base64_imageFromApp); //Carpeta parcial
+    int real_w = M1.cols, real_h = M1.rows,
+        calib_w = 1280, calib_h = (real_h * calib_w)/real_w; //Keeps proportion
+
+    cv::resize(M1, M1, cv::Size(calib_w, calib_h));
+
+#ifdef SHOW_MAIN_RESULTS
+    cv::imwrite("BG Image.png", M1);
+    
+#endif
+
+    //0. Set global mask
+    cv::Mat M1c, M1m;
+    int gksize = 7;
+    int gksize_dil = 5;
+
+    //0.1 Prepare image trying to suppress high texture
+    cv::erode(M1, M1c, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(gksize_dil,gksize_dil)));
+    cv::dilate(M1c, M1c, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(gksize_dil,gksize_dil)));
+    cv::erode(M1c, M1c, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(gksize_dil,gksize_dil)));
+    cv::dilate(M1c, M1c, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(gksize_dil,gksize_dil)));
+    cv::medianBlur(M1c, M1m, gksize);
+
+    #ifdef SHOW_INTERMEDIATE_RESULTS
+        cv::imshow("Global Color Median Blur Image", M1m);
+        cv::waitKey(0);
+    #endif
+
+    //0.2 Get half image
+    cv::Mat M1h(M1m, cv::Rect(0,M1.rows/2,M1.cols,M1.rows/2));
+    #ifdef SHOW_INTERMEDIATE_RESULTS
+        cv::imshow("Half Image", M1h);
+        cv::waitKey(0);
+    #endif
+
+    int gBGRbins = 16, gYUVbins = 16;
+    cv::Mat YUV, ghistoBGR, ghistoYUV;
+    histogram3D(M1h, gBGRbins, &ghistoBGR);
+    cv::cvtColor(M1h, YUV, cv::COLOR_BGR2YCrCb);
+    histogram3D(M1h, gBGRbins, &ghistoBGR);
+    histogram3D(YUV, gYUVbins, &ghistoYUV, false);
+
+    float gbest;
+    cv::Scalar gbest_max;
+    int Yl, Yh;
+    gbest = histoFindYUVMax(ghistoYUV, gYUVbins, gbest_max, Yl, Yh);
+
+    #ifdef SHOW_INTERMEDIATE_RESULTS
+        std::cout << "Best YUV: "
+                << gbest_max.val[0] << " [" << Yl << ";" << Yh << "],"
+                << gbest_max.val[1] << ","
+                << gbest_max.val[2] << ": " << gbest << std::endl;
+    #endif
+
+    //0.4 Alternative YUV: Get simple mask from Y interval, and U,V on their bin,
+    //    assuming that color will not change significantly.
+    cv::Mat ginitial_mask_YUV;
+    ginitial_mask_YUV = BGMaskFromYUV(YUV, Yl, Yh, gbest_max, gYUVbins);
+
+    #ifdef SHOW_INTERMEDIATE_RESULTS
+        cv::imshow("GInitial Mask YUV", ginitial_mask_YUV);
+        cv::waitKey(0);
+    #endif
+
+    cv::Mat global_mask = cv::Mat::zeros(M1m.size(), CV_8UC1), partial_gmask(global_mask, cv::Rect(0,M1.rows/2,M1.cols,M1.rows/2));
+    ginitial_mask_YUV.copyTo(partial_gmask);
+
+    #ifdef SHOW_INTERMEDIATE_RESULTS
+        cv::imshow("Global Mask", global_mask);
+        cv::waitKey(0);
+    #endif
+
+    cv::Mat ext_global_mask = completeNearlyConnected(M1m, global_mask, 20);
+
+    cv::Mat carpet_area;
+    M1.copyTo(carpet_area);
+    
+    cv::Mat mout;
+    M1.copyTo(mout);
+    std::map<int, cv::Point2i> marker_position;
+    marker_position[1] = cv::Point2i(mark1_x, mark1_y);
+    marker_position[2] = cv::Point2i(mark2_x, mark2_y);
+    marker_position[3] = cv::Point2i(mark3_x, mark3_y);
+    marker_position[4] = cv::Point2i(mark4_x, mark4_y);
+    marker_position[5] = cv::Point2i(mark5_x, mark5_y);
+    marker_position[6] = cv::Point2i(mark6_x, mark6_y);
+
+    std::map<int, bool> marker_availability;
+    marker_availability[1] = true;
+    marker_availability[2] = true;
+    marker_availability[3] = true;
+    marker_availability[4] = true;
+    marker_availability[5] = true;
+    marker_availability[6] = true;
+
+    std::cout << "Final markers: " << std::endl;
+    std::map<int, cv::Point2i>::iterator mit, mend = marker_position.end();
+    for(mit = marker_position.begin(); mit != mend; mit++) {
+        cv::Point2i &p = mit->second;
+        std::cout << mit->first << ": (" << p.x << "; " << p.y << ")" << std::endl;
+        addMarker(mout, mit->second, mit->first);
+    }
+#ifdef SHOW_MAIN_RESULTS
+        cv::imwrite("Available markers.png", mout);
+        
+#endif
+
+    //Here we expect 4 points (for the moment...).
+    //Calibrate scene
+    std::vector<cv::Point2f> scenePoints;
+    setScenePoints(scenePoints); // Scene points es la estrella hecha a mano
+
+    std::vector<cv::Point2f> calibScenePoints, imagePoints;
+    std::vector<cv::Point3f> imagePoints_aux;
+
+    calibScenePoints.push_back(scenePoints[0]);
+    imagePoints.push_back(cv::Point2f(marker_position[1].x, marker_position[1].y));
+    imagePoints_aux.push_back(cv::Point3f(marker_position[1].x, marker_position[1].y, 0));
+    
+    calibScenePoints.push_back(scenePoints[1]);
+    imagePoints.push_back(cv::Point2f(marker_position[2].x, marker_position[2].y));
+    imagePoints_aux.push_back(cv::Point3f(marker_position[2].x, marker_position[2].y, 1));
+
+    calibScenePoints.push_back(scenePoints[2]);
+    imagePoints.push_back(cv::Point2f(marker_position[3].x, marker_position[3].y));
+    imagePoints_aux.push_back(cv::Point3f(marker_position[3].x, marker_position[3].y, 2));
+
+    calibScenePoints.push_back(scenePoints[3]);
+    imagePoints.push_back(cv::Point2f(marker_position[4].x, marker_position[4].y));
+    imagePoints_aux.push_back(cv::Point3f(marker_position[4].x, marker_position[4].y, 3));
+
+    calibScenePoints.push_back(scenePoints[4]);
+    imagePoints.push_back(cv::Point2f(marker_position[5].x, marker_position[5].y));
+    imagePoints_aux.push_back(cv::Point3f(marker_position[5].x, marker_position[5].y, 4));
+
+    calibScenePoints.push_back(scenePoints[5]);
+    imagePoints.push_back(cv::Point2f(marker_position[6].x, marker_position[6].y));
+    imagePoints_aux.push_back(cv::Point3f(marker_position[6].x, marker_position[6].y, 5));
+
+
+    cv::Mat H = cv::findHomography(calibScenePoints, imagePoints, cv::RANSAC, 5);
+    cv::Mat fout;
+    cv::Mat fout_fixed;
+    std::vector<cv::Point3f> drawnPoints; // Here we save the final points with index
+    M1.copyTo(fout);
+    M1.copyTo(fout_fixed);
+
+    std::map<int, std::vector<cv::Point2i> > objectiveImPos;
+    for(int i=1; i<= 9; i++) {
+        addPoint(fout, scenePoints[i-1], H, i, drawnPoints);
+    }
+
+    #ifdef SHOW_MAIN_RESULTS
+        cv::imshow("Homografia", fout);
+        cv::waitKey(0);
+    #endif
+
+    for(int i=1; i<= 9; i++) {
+        cv::Point2f sp = scenePoints[i-1];
+        std::vector<cv::Point2i> square;
+        float marker_size = 7.5;
+        square.push_back(getPoint(cv::Point2f(sp.x-marker_size, sp.y-marker_size), H));
+        square.push_back(getPoint(cv::Point2f(sp.x+marker_size, sp.y-marker_size), H));
+        square.push_back(getPoint(cv::Point2f(sp.x+marker_size, sp.y+marker_size), H));
+        square.push_back(getPoint(cv::Point2f(sp.x-marker_size, sp.y+marker_size), H));
+        objectiveImPos[i] = square;
+    }
+
+    //===============================================================================================//
+
+    // We make a filter by color at the mask
+    cv::Mat ext_global_mask_filtered = ext_global_mask.clone();
+    cv::Vec3b color_ref = findPredominantColor(M1m, imagePoints[1].x, imagePoints[1].y, 15);
+
+    #ifdef SHOW_INTERMEDIATE_RESULTS
+        std::cout << "Predominant Color: " << color_ref << std::endl;
+    #endif
+
+    for (int y = ext_global_mask_filtered.rows/4; y < ext_global_mask_filtered.rows; ++y) {
+        for (int x = 0; x < ext_global_mask_filtered.cols; ++x) {
+            if (ext_global_mask_filtered.at<uchar>(y, x) == 0) { 
+                if (!compareColorsAt(M1m, x, y, color_ref, 30)) {
+                    ext_global_mask_filtered.at<uchar>(y, x) = 255;
+    }}}}
+    //===============================================================================================//
+
+    // New mask with with lines between the real mark and the correction
+    cv::Mat visualizedMask;
+    cv::cvtColor(ext_global_mask_filtered, visualizedMask, cv::COLOR_GRAY2BGR);
+    addFixed_marks(imagePoints_aux, drawnPoints, fout_fixed, visualizedMask);
+    //===============================================================================================//
+
+    // We are gonna find the positions of the 3 points who the algoritm doesnt calculate
+    std::vector<cv::Point3f> selectedPoints;
+    std::vector<cv::Point> closestBlackPoints;
+    std::vector<std::vector<cv::Point>> contours;
+    cv::Mat maskClone = ext_global_mask_filtered.clone();
+    cv::Mat drawing = cv::Mat::zeros(ext_global_mask_filtered.size(), CV_8UC3);
+
+    std::vector<int> ids;
+    ids.push_back(9);
+    ids.push_back(8);
+    ids.push_back(7);
+
+    selectedPoints.push_back(drawnPoints[6]);
+    selectedPoints.push_back(drawnPoints[7]);
+    selectedPoints.push_back(drawnPoints[8]);
+
+    findClosestBlackPoints(ext_global_mask_filtered, selectedPoints, closestBlackPoints, visualizedMask, marker_availability);
+    //===============================================================================================//
+
+    // We are gonna findContours on a defined rectangle in the image for efficiency
+    cv::Point3f point0, point1, point2, point3, point4, point5, point6, point7, point8;
+    for (const auto &point : imagePoints_aux) { // We need to identify each point for error management
+        if (point.z == 0){point0 = point;}
+        if (point.z == 1){point1 = point;}
+        if (point.z == 2){point2 = point;}
+        if (point.z == 3){point3 = point;}
+        if (point.z == 4){point4 = point;}
+        if (point.z == 5){point5 = point;}
+        if (point.z == 6){point6 = point;}
+        if (point.z == 7){point7 = point;}
+        if (point.z == 8){point8 = point;}}   
+
+    int verticalDistance = point1.y - point4.y;
+    int height = (verticalDistance * 3) / 4;
+    int x = point2.x;
+    int y = point1.y;
+    int x2 = point0.x;
+    int y2 = point4.y - height;
+    cv::Rect squareROI(x - 100, y2 , x2-x + 220, y-y2 + 50); //we add some slack
+    cv::rectangle(drawing, squareROI, cv::Scalar(255));
+
+    cv::Mat squareMask = maskClone(squareROI);
+    cv::findContours(squareMask, contours, cv::RETR_LIST, cv::CHAIN_APPROX_SIMPLE);
+
+    for (size_t i = 0; i < contours.size(); i++) {
+        for (size_t j = 0; j < contours[i].size(); j++) {
+            contours[i][j].x += x - 100;
+            contours[i][j].y += y2;
+    }}
+
+    for (size_t i = 0; i < contours.size(); i++) {
+        double contourArea = cv::contourArea(contours[i]);
+        if (contourArea > 50 && contourArea < 100000) {
+            cv::Moments m = cv::moments(contours[i]);
+            if (m.m00 > 0) {
+                int cx = static_cast<int>(m.m10 / m.m00);
+                int cy = static_cast<int>(m.m01 / m.m00);
+                cv::Scalar color = cv::Scalar(rand() % 256, rand() % 256, rand() % 256);
+                cv::drawContours(drawing, contours, static_cast<int>(i), color, 2, cv::LINE_8);
+                std::string areaText = std::to_string(contourArea);
+                cv::putText(drawing, areaText, cv::Point(cx, cy), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1);
+                cv::circle(drawing, cv::Point(cx, cy), 2, color, -1);
+    }}}
+
+    #ifdef SHOW_TEST
+        cv::imshow("Contornos", drawing);
+        cv::waitKey(0);
+    #endif
+    //===============================================================================================//
+
+    // We are gonna add fixed 7,8,9 points to the image
+    std::vector<cv::Point2i> centroids;
+
+    for (const auto& contour : contours) {
+        double contourArea = cv::contourArea(contour);
+        cv::Moments m = cv::moments(contour);
+        if (contourArea > 50 && contourArea < 100000){
+            for (const auto& blackpoint : closestBlackPoints) {
+                if (cv::pointPolygonTest(contour, blackpoint, false) >= 0) {
+                    double area = cv::contourArea(contour);
+                    cv::drawContours(visualizedMask, std::vector<std::vector<cv::Point>>{contour}, -1, cv::Scalar(0, 255, 0), 2);
+                    if (m.m00 > 0) {
+                        int cx = static_cast<int>(m.m10 / m.m00);
+                        int cy = static_cast<int>(m.m01 / m.m00);
+                        centroids.push_back(cv::Point2i(cx, cy));}
+                    break;
+    }}}}
+
+    #ifdef SHOW_MAIN_RESULTS
+        cv::imshow("Mascara con correciones", visualizedMask);
+        cv::waitKey(0);
+    #endif
+
+    // We will order the points from left to right
+    std::sort(centroids.begin(), centroids.end(), [](const cv::Point2i& a, const cv::Point2i& b) {
+        return a.x < b.x;
+    });
+
+    std::vector<cv::Point3f> fixed_final_marks;
+    for (size_t i = 0; i < centroids.size(); ++i) {
+        addMarker(fout_fixed, centroids[i], ids[i]);
+        fixed_final_marks.push_back(cv::Point3f(centroids[i].x, centroids[i].y, static_cast<float>(ids[i])));
+    }
+
+    for (const auto& punto : imagePoints_aux) {fixed_final_marks.push_back(cv::Point3f(punto.x, punto.y, static_cast<float>(punto.z+1)));}
+
+    std::sort(fixed_final_marks.begin(), fixed_final_marks.end(), 
+              [](const cv::Point3f& a, const cv::Point3f& b) {
+                  return a.z < b.z;
+              });
+
+
+    // Lets save the final points with contour
+    std::vector<PointWithContour> final_points_contour;
+
+    for (size_t i = 0; i < fixed_final_marks.size(); ++i) {
+        cv::Point punto_aux(fixed_final_marks[i].x, fixed_final_marks[i].y);
+        for (size_t j = 0; j < contours.size(); ++j) {
+            double distancia = cv::pointPolygonTest(contours[j], punto_aux, true);
+            if (distancia >= 0) {
+                PointWithContour puntoConContorno;
+                puntoConContorno.punto = fixed_final_marks[i];
+                puntoConContorno.indiceContorno = j;
+                puntoConContorno.contorno = contours[j];
+                final_points_contour.push_back(puntoConContorno);
+                break;
+            }
+        }
+    }
+
+    // if we not find any mark we just return the mark created by the homography
+    std::vector<int> markerIndices = {7, 8, 9};
+
+    for (int index : markerIndices) {
+        if (!marker_availability[index]) {
+            std::vector<cv::Point> rectangle = addPoint_2(fout_fixed, scenePoints[index - 1], H, index);
+            PointWithContour puntoHomografia;
+            puntoHomografia.punto.x = drawnPoints[index - 1].x;
+            puntoHomografia.punto.y = drawnPoints[index - 1].y;
+            puntoHomografia.punto.z = index;
+            puntoHomografia.indiceContorno = 20 + index;
+            puntoHomografia.contorno = rectangle;
+            final_points_contour.push_back(puntoHomografia);
+    }}
+
+    // Lets draw the final image
+    cv::Mat fout_final;
+    M1.copyTo(fout_final);
+    for (const PointWithContour& point : final_points_contour) {
+        cv::drawContours(fout_final, std::vector<std::vector<cv::Point>>(1, point.contorno), 0, cv::Scalar(0, 255, 255), 2);
+        cv::circle(fout_final, cv::Point(point.punto.x, point.punto.y), 3, cv::Scalar(0, 0, 255));
+        std::string idText = std::to_string(static_cast<int>(point.punto.z));
+        cv::putText(fout_final, idText,
+                    cv::Point(point.punto.x + 5, point.punto.y - 5), cv::FONT_HERSHEY_DUPLEX, 0.5,
+                    cv::Scalar(0, 255, 0));
+    }
+
+    #ifdef SHOW_TEST
+        for (const auto& punto : final_points_contour) {
+            std::cout << "Punto ["<< punto.punto.z << "]: ubicado en (" << punto.punto.x << ", " << punto.punto.y << ")" << " pertenece al contorno " << punto.indiceContorno << std::endl;
+        }
+    #endif
+
+    #ifdef SHOW_MAIN_RESULTS
+        cv::imshow("Fixed sin contornos", fout_fixed);
+        cv::waitKey(0);
+    #endif
+
+    #ifdef SHOW_MAIN_RESULTS
+        cv::imshow("Fixed con contornos", fout_final);
+        cv::waitKey(0);
+    #endif
+
+    #ifdef SHOW_MAIN_RESULTS
+        std::chrono::steady_clock::time_point eend1 = std::chrono::steady_clock::now();
+        std::cout << "Calibrated Scene time = " << std::chrono::duration_cast<std::chrono::seconds>(eend1 - ebegin).count() << "[s]" << std::endl;
+        cv::imwrite("Full calibration.png", fout);
+    #endif
+
+    ImagemConverter Converter = ImagemConverter();
+    std::string H_base64 = Converter.mat2str(H);
+
+    return std::tuple<int, std::string, std::vector<PointWithContour>, std::string, int, int> (0, "{\"state\":\"success\"}", final_points_contour, H_base64, calib_w, calib_h);
+
+    }catch(std::string JSON){
+        std::string H_base64;
+        std::vector<PointWithContour> final_points_contour;
+        int calib_w; int calib_h;
+        return std::tuple<int, std::string, std::vector<PointWithContour>, std::string, int, int> (-1, "{\"state\":\"error\"}", final_points_contour, H_base64, calib_w, calib_h);
     }
 }
