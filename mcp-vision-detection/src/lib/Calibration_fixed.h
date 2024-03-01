@@ -118,12 +118,12 @@ public:
     //Set scene points as star configuration (5 at center, and 8 markers at 200cm distances, 45° distance each
     void setScenePoints(std::vector<cv::Point2f> &scenePoints);
 
-
     //Transforms scene coordinate to image
     cv::Point2i transform(cv::Point2f p, cv::Mat &H);
 
     //Draws a 15 cm square on image
     std::vector<cv::Point> drawRectangle(cv::Mat &img, cv::Point2f &p, cv::Mat &H);
+
     //Get image point from scene coordinate
     cv::Point2i getPoint(cv::Point2f p, cv::Mat &H);
 
