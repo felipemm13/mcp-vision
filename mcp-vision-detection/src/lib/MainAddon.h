@@ -4,7 +4,6 @@
 #include <nan.h>
 
 #include "Calibration_fixed.h"
-#include "Calibration_3.h"
 #include "ConvertImage.h"
 
 using namespace v8;

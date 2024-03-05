@@ -4,7 +4,6 @@
       "target_name": "main",
       "sources": [
         "src/lib/Calibration_fixed.cpp",
-        "src/lib/Calibration_3.cpp",
         "src/lib/ConvertImage.cpp",
         "src/lib/MainAddon.cc",
         "src/main.cc"
