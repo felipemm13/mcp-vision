@@ -1606,10 +1606,10 @@ std::tuple<int,std::string ,std::vector<PointWithContour>, std::string, int, int
         std::cout << "Predominant Color: " << color_ref << std::endl;
     #endif
 
-    for (int y = ext_global_mask_filtered.rows/4; y < ext_global_mask_filtered.rows; ++y) {
+    for (int y = 0; y < ext_global_mask_filtered.rows; ++y) {
         for (int x = 0; x < ext_global_mask_filtered.cols; ++x) {
             if (ext_global_mask_filtered.at<uchar>(y, x) == 0) { 
-                if (!compareColorsAt(M1m, x, y, color_ref, 30)) {
+                if (!compareColorsAt(M1m, x, y, color_ref, 50)) {
                     ext_global_mask_filtered.at<uchar>(y, x) = 255;
     }}}}
     //===============================================================================================//
@@ -1657,37 +1657,25 @@ std::tuple<int,std::string ,std::vector<PointWithContour>, std::string, int, int
         if (point.z == 7){point7 = point;}
         if (point.z == 8){point8 = point;}}   
 
-    int verticalDistance = point1.y - point4.y;
-    int height = (verticalDistance * 3) / 4;
-    int x = point2.x;
-    int y = point1.y;
-    int x2 = point0.x;
-    int y2 = point4.y - height;
-    cv::Rect squareROI(x - 100, y2 , x2-x + 220, y-y2 + 50); //we add some slack
-    cv::rectangle(drawing, squareROI, cv::Scalar(255));
-
-    cv::Mat squareMask = maskClone(squareROI);
-    cv::findContours(squareMask, contours, cv::RETR_LIST, cv::CHAIN_APPROX_SIMPLE);
-
-    for (size_t i = 0; i < contours.size(); i++) {
-        for (size_t j = 0; j < contours[i].size(); j++) {
-            contours[i][j].x += x - 100;
-            contours[i][j].y += y2;
-    }}
+    cv::findContours(ext_global_mask_filtered, contours, cv::RETR_LIST, cv::CHAIN_APPROX_SIMPLE);
+    auto contourFilter = [](const std::vector<cv::Point>& contour) {
+        double area = cv::contourArea(contour);
+        return area <= 40 || area >= 8000;
+    };
+    contours.erase(std::remove_if(contours.begin(), contours.end(), contourFilter), contours.end());
 
     for (size_t i = 0; i < contours.size(); i++) {
         double contourArea = cv::contourArea(contours[i]);
-        if (contourArea > 50 && contourArea < 100000) {
-            cv::Moments m = cv::moments(contours[i]);
-            if (m.m00 > 0) {
-                int cx = static_cast<int>(m.m10 / m.m00);
-                int cy = static_cast<int>(m.m01 / m.m00);
-                cv::Scalar color = cv::Scalar(rand() % 256, rand() % 256, rand() % 256);
-                cv::drawContours(drawing, contours, static_cast<int>(i), color, 2, cv::LINE_8);
-                std::string areaText = std::to_string(contourArea);
-                cv::putText(drawing, areaText, cv::Point(cx, cy), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1);
-                cv::circle(drawing, cv::Point(cx, cy), 2, color, -1);
-    }}}
+        cv::Moments m = cv::moments(contours[i]);
+        if (m.m00 > 0) {
+            int cx = static_cast<int>(m.m10 / m.m00);
+            int cy = static_cast<int>(m.m01 / m.m00);
+            cv::Scalar color = cv::Scalar(rand() % 256, rand() % 256, rand() % 256);
+            cv::drawContours(drawing, contours, static_cast<int>(i), color, 2, cv::LINE_8);
+            std::string areaText = std::to_string(contourArea);
+            cv::putText(drawing, areaText, cv::Point(cx, cy), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1);
+            cv::circle(drawing, cv::Point(cx, cy), 2, color, -1);
+    }}
 
     #ifdef SHOW_TEST
         cv::imshow("Contornos", drawing);
@@ -1701,17 +1689,16 @@ std::tuple<int,std::string ,std::vector<PointWithContour>, std::string, int, int
     for (const auto& contour : contours) {
         double contourArea = cv::contourArea(contour);
         cv::Moments m = cv::moments(contour);
-        if (contourArea > 50 && contourArea < 100000){
-            for (const auto& blackpoint : closestBlackPoints) {
-                if (cv::pointPolygonTest(contour, blackpoint, false) >= 0) {
-                    double area = cv::contourArea(contour);
-                    cv::drawContours(visualizedMask, std::vector<std::vector<cv::Point>>{contour}, -1, cv::Scalar(0, 255, 0), 2);
-                    if (m.m00 > 0) {
-                        int cx = static_cast<int>(m.m10 / m.m00);
-                        int cy = static_cast<int>(m.m01 / m.m00);
-                        centroids.push_back(cv::Point2i(cx, cy));}
-                    break;
-    }}}}
+        for (const auto& blackpoint : closestBlackPoints) {
+            if (cv::pointPolygonTest(contour, blackpoint, false) >= 0) {
+                double area = cv::contourArea(contour);
+                cv::drawContours(visualizedMask, std::vector<std::vector<cv::Point>>{contour}, -1, cv::Scalar(0, 255, 0), 2);
+                if (m.m00 > 0) {
+                    int cx = static_cast<int>(m.m10 / m.m00);
+                    int cy = static_cast<int>(m.m01 / m.m00);
+                    centroids.push_back(cv::Point2i(cx, cy));}
+                break;
+    }}}
 
     #ifdef SHOW_MAIN_RESULTS
         cv::imshow("Mascara con correciones", visualizedMask);
@@ -2014,10 +2001,10 @@ std::tuple<int,std::string ,std::vector<PointWithContour>, std::string, int, int
         std::cout << "Predominant Color: " << color_ref << std::endl;
     #endif
 
-    for (int y = ext_global_mask_filtered.rows/4; y < ext_global_mask_filtered.rows; ++y) {
+    for (int y = 0; y < ext_global_mask_filtered.rows; ++y) {
         for (int x = 0; x < ext_global_mask_filtered.cols; ++x) {
             if (ext_global_mask_filtered.at<uchar>(y, x) == 0) { 
-                if (!compareColorsAt(M1m, x, y, color_ref, 30)) {
+                if (!compareColorsAt(M1m, x, y, color_ref, 50)) {
                     ext_global_mask_filtered.at<uchar>(y, x) = 255;
     }}}}
     //===============================================================================================//
@@ -2060,37 +2047,26 @@ std::tuple<int,std::string ,std::vector<PointWithContour>, std::string, int, int
         if (point.z == 7){point7 = point;}
         if (point.z == 8){point8 = point;}}   
 
-    int verticalDistance = point1.y - point4.y;
-    int height = (verticalDistance * 3) / 4;
-    int x = point2.x;
-    int y = point1.y;
-    int x2 = point0.x;
-    int y2 = point4.y - height;
-    cv::Rect squareROI(x - 100, y2 , x2-x + 220, y-y2 + 50); //we add some slack
-    cv::rectangle(drawing, squareROI, cv::Scalar(255));
-
-    cv::Mat squareMask = maskClone(squareROI);
-    cv::findContours(squareMask, contours, cv::RETR_LIST, cv::CHAIN_APPROX_SIMPLE);
-
-    for (size_t i = 0; i < contours.size(); i++) {
-        for (size_t j = 0; j < contours[i].size(); j++) {
-            contours[i][j].x += x - 100;
-            contours[i][j].y += y2;
-    }}
+    // We find contours in the image, remember we are searching on a mask with black and whites (whites are contours with the predominant color)
+    cv::findContours(ext_global_mask_filtered, contours, cv::RETR_LIST, cv::CHAIN_APPROX_SIMPLE);
+    auto contourFilter = [](const std::vector<cv::Point>& contour) {
+        double area = cv::contourArea(contour);
+        return area <= 40 || area >= 8000;
+    };
+    contours.erase(std::remove_if(contours.begin(), contours.end(), contourFilter), contours.end());
 
     for (size_t i = 0; i < contours.size(); i++) {
         double contourArea = cv::contourArea(contours[i]);
-        if (contourArea > 50 && contourArea < 100000) {
-            cv::Moments m = cv::moments(contours[i]);
-            if (m.m00 > 0) {
-                int cx = static_cast<int>(m.m10 / m.m00);
-                int cy = static_cast<int>(m.m01 / m.m00);
-                cv::Scalar color = cv::Scalar(rand() % 256, rand() % 256, rand() % 256);
-                cv::drawContours(drawing, contours, static_cast<int>(i), color, 2, cv::LINE_8);
-                std::string areaText = std::to_string(contourArea);
-                cv::putText(drawing, areaText, cv::Point(cx, cy), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1);
-                cv::circle(drawing, cv::Point(cx, cy), 2, color, -1);
-    }}}
+        cv::Moments m = cv::moments(contours[i]);
+        if (m.m00 > 0) {
+            int cx = static_cast<int>(m.m10 / m.m00);
+            int cy = static_cast<int>(m.m01 / m.m00);
+            cv::Scalar color = cv::Scalar(rand() % 256, rand() % 256, rand() % 256);
+            cv::drawContours(drawing, contours, static_cast<int>(i), color, 2, cv::LINE_8);
+            std::string areaText = std::to_string(contourArea);
+            cv::putText(drawing, areaText, cv::Point(cx, cy), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1);
+            cv::circle(drawing, cv::Point(cx, cy), 2, color, -1);
+    }}
 
     #ifdef SHOW_TEST
         cv::imshow("Contornos", drawing);
@@ -2104,17 +2080,16 @@ std::tuple<int,std::string ,std::vector<PointWithContour>, std::string, int, int
     for (const auto& contour : contours) {
         double contourArea = cv::contourArea(contour);
         cv::Moments m = cv::moments(contour);
-        if (contourArea > 50 && contourArea < 100000){
-            for (const auto& blackpoint : closestBlackPoints) {
-                if (cv::pointPolygonTest(contour, blackpoint, false) >= 0) {
-                    double area = cv::contourArea(contour);
-                    cv::drawContours(visualizedMask, std::vector<std::vector<cv::Point>>{contour}, -1, cv::Scalar(0, 255, 0), 2);
-                    if (m.m00 > 0) {
-                        int cx = static_cast<int>(m.m10 / m.m00);
-                        int cy = static_cast<int>(m.m01 / m.m00);
-                        centroids.push_back(cv::Point2i(cx, cy));}
-                    break;
-    }}}}
+        for (const auto& blackpoint : closestBlackPoints) {
+            if (cv::pointPolygonTest(contour, blackpoint, false) >= 0) {
+                double area = cv::contourArea(contour);
+                cv::drawContours(visualizedMask, std::vector<std::vector<cv::Point>>{contour}, -1, cv::Scalar(0, 255, 0), 2);
+                if (m.m00 > 0) {
+                    int cx = static_cast<int>(m.m10 / m.m00);
+                    int cy = static_cast<int>(m.m01 / m.m00);
+                    centroids.push_back(cv::Point2i(cx, cy));}
+                break;
+    }}}
 
     #ifdef SHOW_MAIN_RESULTS
         cv::imshow("Mascara con correciones", visualizedMask);
@@ -2213,6 +2188,7 @@ std::tuple<int,std::string ,std::vector<PointWithContour>, std::string, int, int
     return std::tuple<int, std::string, std::vector<PointWithContour>, std::string, int, int> (0, "{\"state\":\"success\"}", final_points_contour, H_base64, calib_w, calib_h);
 
     }catch(std::string JSON){
+        std::cout << "Catch:" << JSON << std::endl;
         std::string H_base64;
         std::vector<PointWithContour> final_points_contour;
         int calib_w; int calib_h;
