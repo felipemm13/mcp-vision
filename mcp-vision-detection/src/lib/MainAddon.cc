@@ -87,7 +87,7 @@ NAN_METHOD(MainAddon::SetCalibrationAutomatic){
                       
 
   responseObject->Set(isolate->GetCurrentContext(),
-                      Nan::New("H_base64").ToLocalChecked(),
+                      Nan::New("H_string").ToLocalChecked(),
                       Nan::New(std::get<3>(response).c_str()).ToLocalChecked());
 
   responseObject->Set(isolate->GetCurrentContext(),
@@ -198,7 +198,7 @@ NAN_METHOD(MainAddon::SetCalibrationSemiAutomatic) {
                       
 
   responseObject->Set(isolate->GetCurrentContext(),
-                      Nan::New("H_base64").ToLocalChecked(),
+                      Nan::New("H_string").ToLocalChecked(),
                       Nan::New(std::get<3>(response).c_str()).ToLocalChecked());
 
   responseObject->Set(isolate->GetCurrentContext(),

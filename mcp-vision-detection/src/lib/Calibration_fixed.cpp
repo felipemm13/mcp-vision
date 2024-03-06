@@ -4,6 +4,22 @@ Calibration_fixed::Calibration_fixed(){
 
 };
 
+// H to json (only data)
+Json::Value Calibration_fixed::matDataToJson(const cv::Mat& mat) {
+    Json::Value dataJson;
+
+    CV_Assert(mat.depth() == CV_64F);
+    const double* pData;
+    for (int i = 0; i < mat.rows; ++i) {
+        pData = mat.ptr<double>(i);
+        for (int j = 0; j < mat.cols; ++j) {
+            dataJson.append(pData[j]);
+        }
+    }
+
+    return dataJson;
+}
+
 //If only cut boxes remaining
 bool Calibration_fixed::cutBBoxes(std::map<int, cv::Rect> &bboxes) {
     if(bboxes.size()==0)
@@ -1789,15 +1805,21 @@ std::tuple<int,std::string ,std::vector<PointWithContour>, std::string, int, int
     #endif
 
     ImagemConverter Converter = ImagemConverter();
-    std::string H_base64 = Converter.mat2str(H);
+    Json::Value jsonH = matDataToJson(H);
+    Json::StreamWriterBuilder builder;
+    builder["commentStyle"] = "None";
+    builder["indentation"] = "";
+    std::string H_string = Json::writeString(builder, jsonH);
+    std::cout << "H json: " << H_string << std::endl;
 
-    return std::tuple<int, std::string, std::vector<PointWithContour>, std::string, int, int> (0, "{\"state\":\"success\"}", final_points_contour, H_base64, calib_w, calib_h);
-    
+    return std::tuple<int, std::string, std::vector<PointWithContour>, std::string, int, int> (0, "{\"state\":\"success\"}", final_points_contour, H_string, calib_w, calib_h);
+   
     }catch(std::string JSON){
-        std::string H_base64;
+        std::cout << "Catch:" << JSON << std::endl;
+        std::string H_string;
         std::vector<PointWithContour> final_points_contour;
         int calib_w; int calib_h;
-        return std::tuple<int, std::string, std::vector<PointWithContour>, std::string, int, int> (-1, "{\"state\":\"error\"}", final_points_contour, H_base64, calib_w, calib_h);
+        return std::tuple<int, std::string, std::vector<PointWithContour>, std::string, int, int> (-1, "{\"state\":\"error\"}", final_points_contour, H_string, calib_w, calib_h);
     }
 }
 
@@ -2183,15 +2205,21 @@ std::tuple<int,std::string ,std::vector<PointWithContour>, std::string, int, int
     #endif
 
     ImagemConverter Converter = ImagemConverter();
-    std::string H_base64 = Converter.mat2str(H);
 
-    return std::tuple<int, std::string, std::vector<PointWithContour>, std::string, int, int> (0, "{\"state\":\"success\"}", final_points_contour, H_base64, calib_w, calib_h);
+    Json::Value jsonH = matDataToJson(H);
+    Json::StreamWriterBuilder builder;
+    builder["commentStyle"] = "None";
+    builder["indentation"] = "";
+    std::string H_string = Json::writeString(builder, jsonH);
+    std::cout << "H json: " << H_string << std::endl;
+
+    return std::tuple<int, std::string, std::vector<PointWithContour>, std::string, int, int> (0, "{\"state\":\"success\"}", final_points_contour, H_string, calib_w, calib_h);
 
     }catch(std::string JSON){
         std::cout << "Catch:" << JSON << std::endl;
-        std::string H_base64;
+        std::string H_string;
         std::vector<PointWithContour> final_points_contour;
         int calib_w; int calib_h;
-        return std::tuple<int, std::string, std::vector<PointWithContour>, std::string, int, int> (-1, "{\"state\":\"error\"}", final_points_contour, H_base64, calib_w, calib_h);
+        return std::tuple<int, std::string, std::vector<PointWithContour>, std::string, int, int> (-1, "{\"state\":\"error\"}", final_points_contour, H_string, calib_w, calib_h);
     }
 }

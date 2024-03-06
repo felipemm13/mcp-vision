@@ -152,6 +152,8 @@ public:
 
     cv::Vec3b findPredominantColor(const cv::Mat& imagen, int x, int y, int radio);
 
+    Json::Value matDataToJson(const cv::Mat& mat);
+
     // Here we calculate de distances between the 6 points calculated with the algotim vs the 6 first point after H
     void addFixed_marks(std::vector<cv::Point3f> imagePoints_aux, std::vector<cv::Point3f> drawnPoints, cv::Mat& fout_fixed, cv::Mat visualizedMask);
 
