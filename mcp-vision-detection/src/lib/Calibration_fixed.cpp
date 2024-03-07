@@ -1804,7 +1804,6 @@ std::tuple<int,std::string ,std::vector<PointWithContour>, std::string, int, int
         cv::waitKey(0);
     #endif
 
-    ImagemConverter Converter = ImagemConverter();
     Json::Value jsonH = matDataToJson(H);
     Json::StreamWriterBuilder builder;
     builder["commentStyle"] = "None";
@@ -2026,7 +2025,7 @@ std::tuple<int,std::string ,std::vector<PointWithContour>, std::string, int, int
     for (int y = 0; y < ext_global_mask_filtered.rows; ++y) {
         for (int x = 0; x < ext_global_mask_filtered.cols; ++x) {
             if (ext_global_mask_filtered.at<uchar>(y, x) == 0) { 
-                if (!compareColorsAt(M1m, x, y, color_ref, 50)) {
+                if (!compareColorsAt(M1m, x, y, color_ref, 80)) {
                     ext_global_mask_filtered.at<uchar>(y, x) = 255;
     }}}}
     //===============================================================================================//
@@ -2203,8 +2202,6 @@ std::tuple<int,std::string ,std::vector<PointWithContour>, std::string, int, int
         std::cout << "Calibrated Scene time = " << std::chrono::duration_cast<std::chrono::seconds>(eend1 - ebegin).count() << "[s]" << std::endl;
         cv::imwrite("Full calibration.png", fout);
     #endif
-
-    ImagemConverter Converter = ImagemConverter();
 
     Json::Value jsonH = matDataToJson(H);
     Json::StreamWriterBuilder builder;

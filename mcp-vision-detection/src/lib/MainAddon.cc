@@ -212,5 +212,4 @@ NAN_METHOD(MainAddon::SetCalibrationSemiAutomatic) {
   // Convierte el objeto de respuesta en una cadena JSON
   v8::Local<v8::String> jsonResponse = JSON::Stringify(isolate->GetCurrentContext(), responseObject).ToLocalChecked();
   info.GetReturnValue().Set(jsonResponse);
-
 }
