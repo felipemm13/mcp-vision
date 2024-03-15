@@ -5,6 +5,7 @@ void MainAddon::Init(Local<Object> target) {
   Nan::SetMethod(target, "createImage", CreateImage);
   Nan::SetMethod(target, "setCalibrationAutomatic", SetCalibrationAutomatic);
   Nan::SetMethod(target, "setCalibrationSemiAutomatic", SetCalibrationSemiAutomatic);
+  Nan::SetMethod(target, "autoAnalysis", AutoAnalysis);
 }
 
 NAN_METHOD(MainAddon::CreateImage) {
@@ -209,6 +210,43 @@ NAN_METHOD(MainAddon::SetCalibrationSemiAutomatic) {
                     Nan::New("calib_h").ToLocalChecked(),
                     Nan::New(std::get<5>(response)));
   
+  // Convierte el objeto de respuesta en una cadena JSON
+  v8::Local<v8::String> jsonResponse = JSON::Stringify(isolate->GetCurrentContext(), responseObject).ToLocalChecked();
+  info.GetReturnValue().Set(jsonResponse);
+}
+
+NAN_METHOD(MainAddon::AutoAnalysis) {
+  
+  v8::Isolate* isolate = info.GetIsolate();
+
+  v8::String::Utf8Value v8Contourjson(isolate, info[0]);
+  std::string contourjson(*v8Contourjson);
+
+  v8::String::Utf8Value v8VideoUrl(isolate, info[1]);
+  std::string videoUrl(*v8VideoUrl);
+
+  v8::String::Utf8Value v8ImageUrl(isolate, info[2]);
+  std::string imageUrl(*v8ImageUrl);
+
+  v8::String::Utf8Value v8JsonString(isolate, info[3]);
+  std::string jsonString(*v8JsonString);
+
+  v8::String::Utf8Value v8H(isolate, info[4]);
+  std::string h(*v8H);
+
+  v8::String::Utf8Value v8W(isolate, info[5]);
+  std::string w(*v8W);
+
+
+  // ============================================================================================= /
+  ComputerVisionWeb CVW = ComputerVisionWeb();
+  int status = CVW.mainFunction(contourjson, videoUrl, imageUrl, jsonString, h, w);
+
+  v8::Local<v8::Object> responseObject = v8::Object::New(isolate);
+  responseObject->Set(isolate->GetCurrentContext(),
+                      Nan::New("status").ToLocalChecked(),
+                      Nan::New(status));
+    
   // Convierte el objeto de respuesta en una cadena JSON
   v8::Local<v8::String> jsonResponse = JSON::Stringify(isolate->GetCurrentContext(), responseObject).ToLocalChecked();
   info.GetReturnValue().Set(jsonResponse);

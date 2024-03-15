@@ -5,11 +5,14 @@
       "sources": [
         "src/lib/Calibration_fixed.cpp",
         "src/lib/ConvertImage.cpp",
+        "src/lib/ExtendedContour.cpp",
+        "src/lib/FeetTracker.cpp",
+        "src/lib/ComputerVisionWeb.cpp",
         "src/lib/MainAddon.cc",
         "src/main.cc"
       ],
       "include_dirs": [
-        "<!(node -e \"require('nan')\")"
+        "<!(node -e \"require('nan')\")",
       ],
       'conditions': [
         ["OS=='linux'", {

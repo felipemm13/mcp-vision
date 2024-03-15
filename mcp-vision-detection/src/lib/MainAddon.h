@@ -5,6 +5,8 @@
 
 #include "Calibration_fixed.h"
 #include "ConvertImage.h"
+#include "ComputerVisionWeb.h"
+#include "CommonDefinitions.h"
 
 using namespace v8;
 using namespace node;
@@ -18,7 +20,7 @@ public:
   static NAN_METHOD(SetDetection);
   static NAN_METHOD(SetCalibrationAutomatic);
   static NAN_METHOD(SetCalibrationSemiAutomatic);  
-
+  static NAN_METHOD(AutoAnalysis);
 
 };
 
