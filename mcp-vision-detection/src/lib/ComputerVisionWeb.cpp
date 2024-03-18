@@ -711,12 +711,50 @@ int ComputerVisionWeb::mainFunction(std::string contourjson, std::string videoUr
         return 1;
     }
 
+    // Antes de cerrar la función, imprime las variables modificadas
+
+    // Imprimir contornos
+    std::cout << "Contornos:\n";
+    for (const auto& contorno : contornos) {
+        std::cout << "Contorno - X: " << contorno.x << ", Y: " << contorno.y << ", Z: " << contorno.z << ", indiceContorno: " << contorno.indiceContorno << "\n";
+        std::cout << "Puntos:";
+        for (const auto& punto : contorno.points) {
+            std::cout << " (" << punto.x << ", " << punto.y << ")";
+        }
+        std::cout << std::endl;
+    }
+
+    // Para sequence, suponiendo que parseSimpleJson y MarkAndTime están definidos correctamente
+    std::cout << "Sequence:\n";
+    for (const auto& markTime : sequence) {
+        std::cout << "Mark: " << markTime.mark_correct << ", Time: " << markTime.frame << std::endl;
+    }
+
+    // Para videoUrl e imageUrl, si han cambiado
+    std::cout << "URL del video procesado: " << urlVideo << std::endl;
+    std::cout << "URL de la imagen de fondo procesada: " << urlBG << std::endl;
+
+    // Para real_w y real_h, dependiendo de cómo los calcules o asignes
+    std::cout << "Ancho real: " << real_w << std::endl;
+    std::cout << "Alto real: " << real_h << std::endl;
+
+    // Para frame_rate, que ya se imprime en el código original
+    // Se imprime de nuevo por si necesitas un recordatorio
+    std::cout << "Frame rate del video: " << frame_rate << std::endl;
+
+    // Finalmente para calib_w y calib_h que se convierten de string a int
+    std::cout << "calib_w: " << calib_w << std::endl;
+    std::cout << "calib_h: " << calib_h << std::endl;
+
+
     // Feet Tracking
     /// Start feet tracking
     double learningRate = 0.005;
     cv::Ptr<cv::BackgroundSubtractorMOG2> mog;
     initTracker(mog);
     cv::Mat current, result, result_big;
+    
+    std::cout << "\n\ntest\n\n" << std::endl;
 
     // Train MoG
     bool first = true;
