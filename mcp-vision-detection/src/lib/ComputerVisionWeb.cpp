@@ -677,7 +677,7 @@ int ComputerVisionWeb::mainFunction(std::string contourjson, std::string videoUr
         contorno.indiceContorno = item["indiceContorno"].asInt();
         for (const auto &punto : item["contorno"])
         {
-            Point p{punto["x"].asInt(), punto["y"].asInt()};
+            cv::Point2f p{punto["x"].asInt(), punto["y"].asInt()};
             contorno.points.push_back(p);
         }
         contornos.push_back(contorno);

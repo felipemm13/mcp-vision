@@ -2150,13 +2150,13 @@ bool rectIntersectsContour(const cv::Rect &rect, const std::vector<cv::Point2f> 
 // Threshold for determining closeness to a contour
 const float CLOSENESS_THRESHOLD = 10.0f;
 
-std::vector<cv::Point2f> convertToPoint2f(const std::vector<Point>& points) {
+/*std::vector<cv::Point2f> convertToPoint2f(const std::vector<Point>& points) {
     std::vector<cv::Point2f> points2f;
     for (const auto& p : points) {
-        points2f.emplace_back(static_cast<float>(p.x), static_cast<float>(p.y));
+        points2f.emplace_back(static_cast<float>(p.a), static_cast<float>(p.b));
     }
     return points2f;
-}
+}*/
 
 // // Determines if a step intersects with or is close to a contour
 // int FeetTracker::intersectsObjective(cv::Mat &img, int index, int frame, cv::Rect &leftStep, bool leftStepOccurred, cv::Rect &rightStep, bool rightStepOccurred)
@@ -2288,8 +2288,8 @@ int FeetTracker::intersectsObjective(cv::Mat &img, int index, int frame, cv::Rec
     for (int contourIndex = 0; contourIndex < this->contours.size(); contourIndex++)
     {
         const Contour &contour = this->contours[contourIndex];
-        std::vector<cv::Point2f> contourPoints2f = convertToPoint2f(contour.points);
-        distance_left = minDistanceToRectContour(leftStep, contourPoints2f);
+        //std::vector<cv::Point2f> contourPoints2f = convertToPoint2f(contour.points);
+        distance_left = minDistanceToRectContour(leftStep, contour.points);
         if (distance_left < minDistance_left) {
             minDistance_left = distance_left;
             id_minDist_left = contourIndex;
@@ -2299,7 +2299,7 @@ int FeetTracker::intersectsObjective(cv::Mat &img, int index, int frame, cv::Rec
             flagFirst = false;
         }
 
-        intersects_left = rectIntersectsContour(leftStep, contourPoints2f);
+        intersects_left = rectIntersectsContour(leftStep, contour.points);
         
         if ((flagFirst && (minDistance_left < CLOSENESS_THRESHOLD) && leftStepOccurred) || (!flagFirst && (intersects_left && leftStepOccurred)))
         {
@@ -2319,7 +2319,7 @@ int FeetTracker::intersectsObjective(cv::Mat &img, int index, int frame, cv::Rec
             this->left_intersects[index] = 0;
         }
 
-        distance_right = minDistanceToRectContour(rightStep, contourPoints2f);
+        distance_right = minDistanceToRectContour(rightStep, contour.points);
         if (distance_right < minDistance_right) {
             minDistance_right = distance_right;
             id_minDist_right = contourIndex;
@@ -2329,7 +2329,7 @@ int FeetTracker::intersectsObjective(cv::Mat &img, int index, int frame, cv::Rec
             flagFirst = false;
         }
 
-        intersects_right = rectIntersectsContour(rightStep, contourPoints2f);
+        intersects_right = rectIntersectsContour(rightStep, contour.points);
 
         if ((flagFirst && (minDistance_right < CLOSENESS_THRESHOLD) && rightStepOccurred) || (!flagFirst && (intersects_right && rightStepOccurred)))
         {
@@ -2395,8 +2395,8 @@ void FeetTracker::insideObjective(int index, int frame, cv::Rect &left, bool lst
         for (int contourIndex = 0; contourIndex < this->contours.size(); contourIndex++)
         {
             const Contour &contour = this->contours[contourIndex];
-            std::vector<cv::Point2f> contourPoints2f = convertToPoint2f(contour.points);
-            distance = minDistanceToPointContour(lpos_cm, contourPoints2f);
+            //std::vector<cv::Point2f> contourPoints2f = convertToPoint2f(contour.points);
+            distance = minDistanceToPointContour(lpos_cm, contour.points);
             if (distance < min_dist)
             {
                 min_dist = distance;
@@ -2430,8 +2430,8 @@ void FeetTracker::insideObjective(int index, int frame, cv::Rect &left, bool lst
         for (int contourIndex = 0; contourIndex < this->contours.size(); contourIndex++)
         {
             const Contour &contour = this->contours[contourIndex];
-            std::vector<cv::Point2f> contourPoints2f = convertToPoint2f(contour.points);
-            distance = minDistanceToPointContour(rpos_cm, contourPoints2f);
+            //std::vector<cv::Point2f> contourPoints2f = convertToPoint2f(contour.points);
+            distance = minDistanceToPointContour(rpos_cm, contour.points);
             if (distance < min_dist)
             {
                 min_dist = distance;

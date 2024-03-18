@@ -1,19 +1,15 @@
 #ifndef COMMON_DEFINITIONS_H
 #define COMMON_DEFINITIONS_H
 
+#include <opencv2/core/types.hpp>
 #include <vector>
-
-struct Point {
-    int x;
-    int y;
-};
 
 struct Contour {
     int x;
     int y;
     int z;
     int indiceContorno;
-    std::vector<Point> points;
+    std::vector<cv::Point2f> points;
 };
 
 struct MarkAndTime {
