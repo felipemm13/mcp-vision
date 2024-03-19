@@ -656,7 +656,7 @@ std::string ComputerVisionWeb::buildFinalOutput(std::string jsonData, std::vecto
     return "";
 }
 
-int ComputerVisionWeb::mainFunction(std::string contourjson, std::string videoUrl, std::string imageUrl, std::string jsonString, std::string h, std::string w)
+int ComputerVisionWeb::mainFunction(std::string contourjson, std::string videoUrl, std::string imageUrl, std::string jsonString)
 {
     // String contornos se debe pasar a std::vector<Contour>
     std::istringstream iss(contourjson);
@@ -664,8 +664,9 @@ int ComputerVisionWeb::mainFunction(std::string contourjson, std::string videoUr
     Json::Value root;
     iss >> root;
 
-    //std::string calib_w = std::to_string(root["response"]["calib_w"].asInt());
-    //::string calib_h = std::to_string(root["response"]["calib_h"].asInt());
+    std::string string_calib_w = std::to_string(root["response"]["calib_w"].asInt());
+    std::string string_calib_h = std::to_string(root["response"]["calib_h"].asInt());
+    
     std::vector<Contour> contornos;
 
     for (const auto &item : root["response"]["points"])
@@ -693,8 +694,9 @@ int ComputerVisionWeb::mainFunction(std::string contourjson, std::string videoUr
     std::string urlBG = "bg.jpg";
 
     int real_w, real_h;
-    int calib_h = std::stoi(h);
-    int calib_w = std::stoi(w);
+    int calib_w = std::stoi(string_calib_w);
+    int calib_h = std::stoi(string_calib_h);
+
 
     cv::VideoCapture vtest;
     vtest.open(urlVideo);
@@ -731,12 +733,8 @@ int ComputerVisionWeb::mainFunction(std::string contourjson, std::string videoUr
     }
 
     // Para videoUrl e imageUrl, si han cambiado
-    std::cout << "URL del video procesado: " << urlVideo << std::endl;
-    std::cout << "URL de la imagen de fondo procesada: " << urlBG << std::endl;
-
-    // Para real_w y real_h, dependiendo de cómo los calcules o asignes
-    std::cout << "Ancho real: " << real_w << std::endl;
-    std::cout << "Alto real: " << real_h << std::endl;
+    std::cout << "URL del video procesado: " << videoUrl << std::endl;
+    std::cout << "URL de la imagen de fondo procesada: " << imageUrl << std::endl;
 
     // Para frame_rate, que ya se imprime en el código original
     // Se imprime de nuevo por si necesitas un recordatorio

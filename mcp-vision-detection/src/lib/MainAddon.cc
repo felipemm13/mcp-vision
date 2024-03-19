@@ -231,16 +231,9 @@ NAN_METHOD(MainAddon::AutoAnalysis) {
   v8::String::Utf8Value v8JsonString(isolate, info[3]);
   std::string jsonString(*v8JsonString);
 
-  v8::String::Utf8Value v8H(isolate, info[4]);
-  std::string h(*v8H);
-
-  v8::String::Utf8Value v8W(isolate, info[5]);
-  std::string w(*v8W);
-
-
   // ============================================================================================= /
   ComputerVisionWeb CVW = ComputerVisionWeb();
-  int status = CVW.mainFunction(contourjson, videoUrl, imageUrl, jsonString, h, w);
+  int status = CVW.mainFunction(contourjson, videoUrl, imageUrl, jsonString);
 
   v8::Local<v8::Object> responseObject = v8::Object::New(isolate);
   responseObject->Set(isolate->GetCurrentContext(),

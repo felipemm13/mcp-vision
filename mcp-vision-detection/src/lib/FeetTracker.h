@@ -3,16 +3,6 @@
 
 #include "CommonDefinitions.h"
 
-#include <opencv2/highgui/highgui.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
-#include <opencv2/ximgproc.hpp>
-#include <opencv2/opencv.hpp>
-
-#include <string>
-#include <deque>
-#include <vector>
-#include <cfloat>
-
 //#define SHOW_INTERMEDIATE_RESULTS
 //#define SHOW_FINAL_RESULTS
 

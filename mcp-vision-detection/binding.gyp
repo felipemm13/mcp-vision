@@ -24,6 +24,7 @@
             "-lopencv_highgui",
             "-lopencv_imgcodecs",
             '-lopencv_calib3d',
+            "-lopencv_video",
             '-ljsoncpp'
           ]
         }]

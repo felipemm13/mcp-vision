@@ -1,9 +1,7 @@
 #ifndef EXTENDEDCONTOUR_H
 #define EXTENDEDCONTOUR_H
 
-#include <opencv2/opencv.hpp>
-#include <map>
-#include <cfloat>
+#include "CommonDefinitions.h"
 
 class extendedContour
 {

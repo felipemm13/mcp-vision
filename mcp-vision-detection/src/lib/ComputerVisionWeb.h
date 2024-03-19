@@ -1,17 +1,6 @@
 #ifndef MAIN_H
 #define MAIN_H
 
-#include <iostream>
-#include <fstream>
-#include <sstream>
-#include <map>
-#include <curl/curl.h>
-#include <jsoncpp/json/json.h>
-#include <chrono>
-#include <cfloat>
-#include <nlohmann/json.hpp>
-using json = nlohmann::json;
-
 //#define SHOW_INTERMEDIATE_RESULTS
 //#define SHOW_FINAL_RESULTS
 //#define MEMORY_DEBUG
@@ -52,7 +41,7 @@ public:
     // d: distance to nearest center       (odist1, odist2)
     
     std::string buildJsonData(FeetTracker &ft);
-    int mainFunction(std::string contourjson, std::string videoUrl, std::string imageUrl, std::string jsonString, std::string h, std::string w);
+    int mainFunction(std::string contourjson, std::string videoUrl, std::string imageUrl, std::string jsonString);
 
     std::string buildFinalOutput(std::string jsonData, std::vector<MarkAndTime> sequence);
 };
