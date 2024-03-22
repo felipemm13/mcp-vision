@@ -318,24 +318,17 @@ void downloadMedia(const std::string &videoUrl, const std::string &imageUrl)
     }
 }
 
-std::vector<MarkAndTime> parseSimpleJson(const std::string &jsonString)
-{
+std::vector<MarkAndTime> parseSimpleJson(const std::string &jsonString) {
+    auto j = json::parse(jsonString);
     std::vector<MarkAndTime> marks;
-    std::istringstream stream(jsonString);
-    std::string line;
-
-    while (std::getline(stream, line))
-    {
-        if (line.find("mark_correct") != std::string::npos)
-        {
-            MarkAndTime mark;
-            mark.mark_correct = std::stoi(line.substr(line.find(":") + 1));
-            std::getline(stream, line);
-            mark.frame = std::stoi(line.substr(line.find(":") + 1));
-            marks.push_back(mark);
-        }
+    
+    for (const auto& item : j) {
+        MarkAndTime mark;
+        mark.mark_correct = item["mark_correct"].get<int>();
+        mark.frame = item["frame"].get<int>();
+        marks.push_back(mark);
     }
-
+    
     return marks;
 }
 
