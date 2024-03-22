@@ -296,8 +296,8 @@ bool downloadFile(const std::string &url, const std::string &outFilename)
 
 void downloadMedia(const std::string &videoUrl, const std::string &imageUrl)
 {
-    std::string videoFilename = "video.mp4";
-    std::string imageFilename = "bg.jpg";
+    std::string videoFilename = "/usr/src/app/mcp-vision-detection/video.mp4";
+    std::string imageFilename = "/usr/src/app/mcp-vision-detection/bg.jpg";
 
     if (downloadFile(videoUrl, videoFilename))
     {
@@ -608,8 +608,8 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
     // Video e imagen
     downloadMedia(videoUrl, imageUrl);
 
-    std::string urlVideo = "video.mp4";
-    std::string urlBG = "bg.jpg";
+    std::string urlVideo = "/usr/src/app/mcp-vision-detection/video.mp4";
+    std::string urlBG = "/usr/src/app/mcp-vision-detection/bg.jpg";
 
     int real_w, real_h;
     int calib_w = std::stoi(string_calib_w);
