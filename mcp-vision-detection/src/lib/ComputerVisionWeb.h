@@ -41,9 +41,7 @@ public:
     // d: distance to nearest center       (odist1, odist2)
     
     std::string buildJsonData(FeetTracker &ft);
-    int mainFunction(std::string contourjson, std::string videoUrl, std::string imageUrl, std::string jsonString);
-
+    std::string mainFunction(std::string contourjson, std::string videoUrl, std::string imageUrl, std::string jsonString);
     std::string buildFinalOutput(std::string jsonData, std::vector<MarkAndTime> sequence);
 };
-
 #endif // ComputerVisionWeb_H

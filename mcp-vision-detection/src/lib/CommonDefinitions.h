@@ -31,6 +31,26 @@
 
 using json = nlohmann::json;
 
+struct item {
+    int code;
+    int intersects;
+    int frame;
+    float d_l;
+    float d_r;
+    bool step_l;
+    bool step_r;
+};
+
+struct Section {
+    bool error;
+    int takeoff_frame;
+    int arrival_frame;
+    int arrival_code;
+    std::vector<item> items;
+
+    Section() : error(false), takeoff_frame(0), arrival_frame(0), arrival_code(0) {}
+};
+
 struct Contour {
     int x;
     int y;
@@ -42,14 +62,6 @@ struct Contour {
 struct MarkAndTime {
     int mark_correct;
     int frame;
-};
-
-struct item {
-    int code;
-    int intersects;
-    int frame;
-    float d_l;
-    float d_r;
 };
 
 #endif // COMMON_DEFINITIONS_H

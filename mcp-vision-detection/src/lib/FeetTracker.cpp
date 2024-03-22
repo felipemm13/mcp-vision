@@ -2427,7 +2427,7 @@ void FeetTracker::insideObjective(int index, int frame, cv::Rect &left, bool lst
         cv::Point2f rpos = getStepPosition(frame, right), rpos_cm = transformInv(rpos);
         left_foot[index] = rpos;
 
-        for (int contourIndex = 0; contourIndex < this->contours.size(); contourIndex++)
+        for      (int contourIndex = 0; contourIndex < this->contours.size(); contourIndex++)
         {
             const Contour &contour = this->contours[contourIndex];
             //std::vector<cv::Point2f> contourPoints2f = convertToPoint2f(contour.points);

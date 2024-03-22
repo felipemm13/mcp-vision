@@ -233,14 +233,19 @@ NAN_METHOD(MainAddon::AutoAnalysis) {
 
   // ============================================================================================= /
   ComputerVisionWeb CVW = ComputerVisionWeb();
-  int status = CVW.mainFunction(contourjson, videoUrl, imageUrl, jsonString);
+  std::string response = CVW.mainFunction(contourjson, videoUrl, imageUrl, jsonString);
 
-  v8::Local<v8::Object> responseObject = v8::Object::New(isolate);
-  responseObject->Set(isolate->GetCurrentContext(),
-                      Nan::New("status").ToLocalChecked(),
-                      Nan::New(status));
-    
+  // Crea un nuevo objeto de respuesta
+  v8::Local<v8::Object> responseObject = Nan::New<v8::Object>();
+  
+  // Configura la propiedad 'output' en el objeto de respuesta
+  Nan::Set(responseObject, Nan::New("output").ToLocalChecked(), Nan::New(response).ToLocalChecked());
+
   // Convierte el objeto de respuesta en una cadena JSON
-  v8::Local<v8::String> jsonResponse = JSON::Stringify(isolate->GetCurrentContext(), responseObject).ToLocalChecked();
+  v8::Local<v8::Context> context = Nan::GetCurrentContext();
+  v8::Local<v8::String> jsonResponse = Nan::To<v8::String>(
+    JSON::Stringify(context, responseObject).ToLocalChecked()
+  ).ToLocalChecked();
+
   info.GetReturnValue().Set(jsonResponse);
 }

@@ -4,27 +4,6 @@ ComputerVisionWeb::ComputerVisionWeb()
 {
 }
 
-size_t ComputerVisionWeb::write_data(char *ptr, size_t size, size_t nmemb, void *userdata)
-{
-    vector<uchar> *stream = (vector<uchar> *)userdata;
-    size_t count = size * nmemb;
-    stream->insert(stream->end(), ptr, ptr + count);
-    return count;
-}
-
-// function to retrieve the image as cv::Mat data type
-cv::Mat ComputerVisionWeb::curlImg(const char *img_url, int timeout)
-{
-    vector<uchar> stream;
-    CURL *curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, img_url);                                 // the img url
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, ComputerVisionWeb::write_data); // pass the writefunction
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &stream);                           // pass the stream ptr to the writefunction
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeout);                             // timeout if curl_easy hangs,
-    CURLcode res = curl_easy_perform(curl);                                       // start curl
-    curl_easy_cleanup(curl);                                                      // cleanup
-    return cv::imdecode(stream, -1);                                              // 'keep-as-is'
-}
 
 void ComputerVisionWeb::initTracker(cv::Ptr<cv::BackgroundSubtractorMOG2> &mog)
 {
@@ -192,103 +171,6 @@ namespace
     }
 }
 
-int ComputerVisionWeb::getCalibrationData(const std::string query, cv::Mat &H, int &w, int &h)
-{
-    // CURL+JSON
-    CURL *curl = curl_easy_init();
-
-    // Set remote URL.
-    curl_easy_setopt(curl, CURLOPT_URL, query.c_str());
-
-    // Don't bother trying IPv6, which would increase DNS resolution time.
-    curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
-
-    // Don't wait forever, time out after 10 seconds.
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10);
-
-    // Follow HTTP redirects if necessary.
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-
-    // Response information.
-    long httpCode(0);
-    std::unique_ptr<std::string> httpData(new std::string());
-
-    // Hook up data handling function.
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, callback);
-
-    // Hook up data container (will be passed as the last parameter to the
-    // callback handling function).  Can be any pointer type, since it will
-    // internally be passed as a void pointer.
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, httpData.get());
-
-    // Run our HTTP GET command, capture the HTTP response code, and clean up.
-    curl_easy_perform(curl);
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
-    curl_easy_cleanup(curl);
-
-    if (httpCode == 200)
-    {
-#ifdef SHOW_INTERMEDIATE_RESULTS
-        std::cout << "\nGot successful response from " << query << std::endl;
-#endif
-        // Response looks good - done using Curl now.  Try to parse the results
-        // and print them out.
-        Json::Value jsonData;
-        Json::Reader jsonReader;
-
-        if (jsonReader.parse(*httpData.get(), jsonData))
-        {
-#ifdef SHOW_INTERMEDIATE_RESULTS
-            std::cout << "Successfully parsed JSON data" << std::endl;
-            std::cout << "\nJSON data received:" << std::endl;
-            std::cout << jsonData.toStyledString() << std::endl;
-#endif
-            const std::string dateString(jsonData["createTime"].asString());
-            //            const std::size_t unixTimeMs(
-            //                     jsonData["createTime"].asUInt64());
-            const std::string timeString(jsonData["updateTime"].asString());
-
-#ifdef SHOW_INTERMEDIATE_RESULTS
-            std::cout << "Natively parsed:" << std::endl;
-            std::cout << "\tDate string: " << dateString << std::endl;
-            //            std::cout << "\tUnix timeMs: " << unixTimeMs << std::endl;
-            std::cout << "\tTime string: " << timeString << std::endl;
-            std::cout << std::endl;
-#endif
-            std::string ws, hs;
-            H = cv::Mat::zeros(3, 3, CV_64FC1);
-            w = atoi(jsonData["fields"]["Wcalib"]["integerValue"].asString().c_str());
-            h = atoi(jsonData["fields"]["Hcalib"]["integerValue"].asString().c_str());
-
-            for (uint i = 0; i < 9; ++i)
-            {
-                Json::Value &v = jsonData["fields"]["Homography"]["arrayValue"]["values"][i];
-                if (v.isMember("doubleValue"))
-                    H.at<double>(i) = v["doubleValue"].asDouble();
-                else
-                    H.at<double>(i) = atoi(v["integerValue"].asString().c_str());
-#ifdef SHOW_INTERMEDIATE_RESULTS
-                std::cout << H << std::endl;
-#endif
-            }
-        }
-        else
-        {
-            std::cout << "Could not parse HTTP data as JSON" << std::endl;
-            std::cout << "HTTP data was:\n"
-                      << *httpData.get() << std::endl;
-            return 1;
-        }
-    }
-    else
-    {
-        std::cout << "Couldn't GET from " << query << " - exiting" << std::endl;
-        return 1;
-    }
-
-    return 0;
-}
-
 // Per frame: Two feet. By foot: (x y w h code xp yp d)
 //  (x,y,w,h): foot rect                (left_step, right_step)
 //  code:                               (in_objective1, in_objective2)
@@ -309,6 +191,8 @@ std::string ComputerVisionWeb::buildJsonData(FeetTracker &ft)
     std::string output_l_yp = "";
     std::string output_l_d = "";
     std::string output_l_intersects = "";
+    std::string output_l_step = "";
+
     std::string output_r_x = "";
     std::string output_r_y = "";
     std::string output_r_w = "";
@@ -318,6 +202,8 @@ std::string ComputerVisionWeb::buildJsonData(FeetTracker &ft)
     std::string output_r_yp = "";
     std::string output_r_d = "";
     std::string output_r_intersects = "";
+    std::string output_r_step = "";
+
     int i, n = ft.left_step.size();
 
     for (i = 0; i < n; ++i)
@@ -333,6 +219,7 @@ std::string ComputerVisionWeb::buildJsonData(FeetTracker &ft)
         output_l_yp += "{\"doubleValue\": " + std::to_string(ft.left_foot[i].y) + ",\"frame\": " + std::to_string(i) + "},";
         output_l_d += "{\"doubleValue\": " + std::to_string(ft.odist1[i]) + ",\"frame\": " + std::to_string(i) + "},";
         output_l_intersects += "{\"integerValue\": " + std::to_string(ft.left_intersects[i]) + ",\"frame\": " + std::to_string(i) + "},";
+        output_l_step += "{\"boolValue\": " + std::to_string(ft.left_step[i]) + ",\"frame\": " + std::to_string(i) + "},";
 
         output_r_x += "{\"integerValue\": " + std::to_string(rr.x) + ",\"frame\": " + std::to_string(i) + "},";
         output_r_y += "{\"integerValue\": " + std::to_string(rr.y) + ",\"frame\": " + std::to_string(i) + "},";
@@ -343,6 +230,7 @@ std::string ComputerVisionWeb::buildJsonData(FeetTracker &ft)
         output_r_yp += "{\"doubleValue\": " + std::to_string(ft.right_foot[i].y) + ",\"frame\": " + std::to_string(i) + "},";
         output_r_d += "{\"doubleValue\": " + std::to_string(ft.odist2[i]) + ",\"frame\": " + std::to_string(i) + "},";
         output_r_intersects += "{\"integerValue\": " + std::to_string(ft.right_intersects[i]) + ",\"frame\": " + std::to_string(i) + "},";
+        output_r_step += "{\"boolValue\": " + std::to_string(ft.right_step[i]) + ",\"frame\": " + std::to_string(i) + "},";
     }
 
     output = "{\"fields\" : {";
@@ -359,7 +247,8 @@ std::string ComputerVisionWeb::buildJsonData(FeetTracker &ft)
     output += "\"w\": { \"arrayValue\": { \"values\": [" + output_l_w.substr(0, output_l_w.size() - 1) + "] } },";
     output += "\"xp\": { \"arrayValue\": { \"values\": [" + output_l_xp.substr(0, output_l_xp.size() - 1) + "] } },";
     output += "\"h\": { \"arrayValue\": { \"values\": [" + output_l_h.substr(0, output_l_h.size() - 1) + "] } },";
-    output += "\"intersects\": { \"arrayValue\": { \"values\": [" + output_l_intersects.substr(0, output_l_intersects.size() - 1) + "] } }";
+    output += "\"intersects\": { \"arrayValue\": { \"values\": [" + output_l_intersects.substr(0, output_l_intersects.size() - 1) + "] } },";
+    output += "\"step\": { \"arrayValue\": { \"values\": [" + output_l_step.substr(0, output_l_step.size() - 1) + "] } }";
     output += "}}},";
 
     output += "\"Right\": { \"mapValue\": { \"fields\": {";
@@ -371,7 +260,8 @@ std::string ComputerVisionWeb::buildJsonData(FeetTracker &ft)
     output += "\"w\": { \"arrayValue\": { \"values\": [" + output_r_w.substr(0, output_r_w.size() - 1) + "] } },";
     output += "\"xp\": { \"arrayValue\": { \"values\": [" + output_r_xp.substr(0, output_r_xp.size() - 1) + "] } },";
     output += "\"h\": { \"arrayValue\": { \"values\": [" + output_r_h.substr(0, output_r_h.size() - 1) + "] } },";
-    output += "\"intersects\": { \"arrayValue\": { \"values\": [" + output_r_intersects.substr(0, output_r_intersects.size() - 1) + "] } }";
+    output += "\"intersects\": { \"arrayValue\": { \"values\": [" + output_r_intersects.substr(0, output_r_intersects.size() - 1) + "] } },";
+    output += "\"step\": { \"arrayValue\": { \"values\": [" + output_r_step.substr(0, output_r_step.size() - 1) + "] } }";
     output += "}}}";
     output += "}}";
 
@@ -559,29 +449,106 @@ std::vector<item> compressMarks(const std::vector<item> &marks)
     return compressedMarks;
 }
 
-std::vector<item> buildArrivals(std::vector<MarkAndTime> real_sequence, std::vector<item> player_sequence)
-{
-    std::vector<item> arrivals;
-    bool isSequenceStart = true; // Suponemos que el inicio de la lista puede ser el inicio de una secuencia
+std::vector<Section> divideItemsIntoSequences(const std::vector<item>& items) {
+    std::vector<Section> sequences;
+    Section currentSection;
 
-    for (size_t i = 0; i < player_sequence.size(); ++i)
-    {
-        // Comprobar si estamos al inicio de una secuencia de intersects == 1
-        if (player_sequence[i].intersects == 1 && (isSequenceStart || player_sequence[i - 1].intersects == 0))
-        {
-            arrivals.push_back(player_sequence[i]); // Agregar el item al vector de llegadas
-            isSequenceStart = false;                // Actualizar el indicador de inicio de secuencia
+    // Función auxiliar para verificar si una sección contiene solo ítems con código 5
+    auto sectionContainsOnlyFives = [](const Section& sec) {
+        for (const auto& itm : sec.items) {
+            if (itm.code != 5) {
+                return false; // Si encuentra algo que no es un 5, devuelve falso
+            }
         }
-        else if (player_sequence[i].intersects == 0)
-        {
-            isSequenceStart = true; // Si encontramos un intersects == 0, el próximo item con intersects == 1 será el inicio de una nueva secuencia
+        return true; // Si todos son 5s, devuelve verdadero
+    };
+
+    if (!items.empty()) {
+        currentSection.items.push_back(items[0]);
+    }
+
+    for (size_t i = 1; i < items.size(); ++i) {
+        const item& current_item = items[i];
+        const item& previous_item = items[i - 1];
+
+        // Condición principal para revisar si necesitamos empezar una nueva sección
+        if (current_item.code == 5 && (previous_item.code != 5 || (previous_item.code == 5 && previous_item.intersects == 0)) && current_item.intersects == 1) {
+            // Añadir el ítem actual a la sección actual antes de verificar
+            currentSection.items.push_back(current_item);
+            // Verificar si la sección actual contiene solo 5s antes de finalizarla
+            if (!sectionContainsOnlyFives(currentSection)) {
+                sequences.push_back(currentSection);
+            }
+            currentSection = Section(); // Resetear la sección actual para empezar una nueva
+        }
+
+        // Agregar el ítem actual a la sección en construcción si no hemos empezado una nueva sección
+        if (currentSection.items.empty() || currentSection.items.back().frame != current_item.frame) {
+            currentSection.items.push_back(current_item);
         }
     }
-    return arrivals;
+
+    // Verificar y añadir la última sección si no está vacía y no contiene solo 5s
+    if (!currentSection.items.empty() && !sectionContainsOnlyFives(currentSection)) {
+        sequences.push_back(currentSection);
+    }
+
+    return sequences;
 }
 
-std::string ComputerVisionWeb::buildFinalOutput(std::string jsonData, std::vector<MarkAndTime> sequence)
-{
+int calculateTakeoffFrame(std::vector<item> sequence) {
+    for (size_t i = 1; i < sequence.size(); ++i) {
+        const item& current_item = sequence[i];
+        const item& previous_item = sequence[i - 1];
+
+        if ( ((current_item.code != 5) || (current_item.code == 5 && current_item.intersects == 0)) && (previous_item.code == 5 && previous_item.intersects == 1)) {
+            return current_item.frame;
+        }
+    }
+}
+
+std::pair<int, int> calculateArrivalFrame(std::vector<item> sequence) {
+    int aux = 5;
+    int outFrame = 0;
+    for (size_t i = sequence.size() - 1; i > 0 ; i--) {
+        const item& current_item = sequence[i - 1];
+
+        if (current_item.intersects == 1 && (current_item.code != aux)){
+            aux = current_item.code;
+            outFrame = current_item.frame; 
+            for (size_t k = sequence.size() - 1; k > 0; k--) {
+                const item& current_itemsito = sequence[k - 1];
+
+                if (current_itemsito.intersects == 1 && current_itemsito.code == aux ){
+                    outFrame = current_itemsito.frame;
+                }
+
+                if ( (current_itemsito.code != aux) && (current_itemsito.intersects == 1) ){
+                    return std::make_pair(outFrame, aux);
+                }
+            }
+        }
+    }
+}
+
+std::string toJSON(const std::vector<Section>& sections) {
+    std::string json = "[\n";
+    for(size_t i = 0; i < sections.size(); ++i) {
+        const Section& sec = sections[i];
+        json += "    {\n";
+        json += "    \"id_sequence\": " + std::to_string(i) + ",\n";
+        json += "    \"takeoff_frame\": " + std::to_string(sec.takeoff_frame) + ",\n";
+        json += "    \"arrival_frame\": " + std::to_string(sec.arrival_frame) + ",\n";
+        json += "    \"error\": " + std::string(sec.error ? "true" : "false") + "\n";
+        json += "    }";
+        if (i < sections.size() - 1) json += ",";
+        json += "\n";
+    }
+    json += "]";
+    return json;
+}
+
+std::string ComputerVisionWeb::buildFinalOutput(std::string jsonData, std::vector<MarkAndTime> sequence) {
     // Convertir jsonData a objeto JSON
     auto j = json::parse(jsonData);
 
@@ -597,67 +564,25 @@ std::string ComputerVisionWeb::buildFinalOutput(std::string jsonData, std::vecto
         int intersects = j["fields"]["Left"]["mapValue"]["fields"]["intersects"]["arrayValue"]["values"][i]["integerValue"];
         float d_l = j["fields"]["Left"]["mapValue"]["fields"]["d"]["arrayValue"]["values"][i]["doubleValue"];
         float d_r = j["fields"]["Right"]["mapValue"]["fields"]["d"]["arrayValue"]["values"][i]["doubleValue"];
-
-        items.push_back({code, intersects, i, d_l, d_r});
+        int step_l = j["fields"]["Left"]["mapValue"]["fields"]["step"]["arrayValue"]["values"][i]["boolValue"];
+        int step_r = j["fields"]["Right"]["mapValue"]["fields"]["step"]["arrayValue"]["values"][i]["boolValue"];
+        
+        items.push_back({code, intersects, i, d_l, d_r, step_l, step_r});
     }
 
-    std::cout << "\n =========== items ===========\n"
-              << std::endl;
-    std::stringstream ss;
-    for (const auto &it : items)
-    {
-        ss << "Frame: " << it.frame << ", Code: " << it.code
-           << ", Intersects: " << it.intersects << ", d_l: " << it.d_l << ", d_r: " << it.d_r << "\n";
+    // dividir items en secuencias y calcular frames de despegue y llegada
+    auto sequences = divideItemsIntoSequences(items);
+    for (auto& seq : sequences) {
+        seq.takeoff_frame = calculateTakeoffFrame(seq.items);
+        auto result = calculateArrivalFrame(seq.items);
+        seq.arrival_frame = result.first;
+        seq.arrival_code = result.second;
     }
 
-    std::cout << ss.str() << std::endl;
-
-    std::vector<item> compressedMarks = compressMarks(items);
-    std::cout << "\n =========== CompressedMarks ===========\n"
-              << std::endl;
-    for (const auto &mark : compressedMarks)
-    {
-        std::cout << "Frame: " << mark.frame << ", Code: " << mark.code << ", Intersects: " << mark.intersects << ", d_l: " << mark.d_l << ", d_r: " << mark.d_r << std::endl;
-    }
-
-    insertMidFrameMarks(sequence);
-    std::cout << "\n =========== Sequence_5s ===========\n"
-              << std::endl;
-    std::vector<item> sequence_5s = insertUniqueIntersectMarks(items);
-    std::vector<item> sequence_5s_filtered = filterCloseFrames(sequence_5s);
-
-    std::cout << "\n =========== Secuencia Original ===========\n" << std::endl;
-    for (size_t i = 0; i < sequence.size(); i++)
-    {
-        std::cout << "Marca Correcta: " << sequence[i].mark_correct << ", Frame: " << sequence[i].frame << std::endl;
-    }
-
-    std::stringstream ssss;
-    ssss << "\n =========== Takeoffs ===========\n";
-    for (const auto &it : sequence_5s_filtered)
-    {
-        ssss << "Frame: " << it.frame << ", Code: " << it.code
-             << ", Intersects: " << it.intersects << ", d_l: " << it.d_l << ", d_r: " << it.d_r << "\n";
-    }
-
-    std::cout << ssss.str() << std::endl;
-    
-    // ==================================== Arrivals ==================================== //
-    std::vector<item> arrivals = buildArrivals(sequence, items);
-    arrivals = filterCloseFrames(arrivals);
-
-    std::cout << "\n =========== Arrivals ===========\n" << std::endl;
-    for (const auto &it : arrivals)
-    {
-        std::cout << "Frame: " << it.frame << ", Code: " << it.code
-                  << ", Intersects: " << it.intersects << ", d_l: " << it.d_l << ", d_r: " << it.d_r << std::endl;
-    };
-
-    return "";
+    return toJSON(sequences);;
 }
 
-int ComputerVisionWeb::mainFunction(std::string contourjson, std::string videoUrl, std::string imageUrl, std::string jsonString)
-{
+std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string videoUrl, std::string imageUrl, std::string jsonString) {
     // String contornos se debe pasar a std::vector<Contour>
     std::istringstream iss(contourjson);
 
@@ -710,7 +635,7 @@ int ComputerVisionWeb::mainFunction(std::string contourjson, std::string videoUr
     else
     {
         std::cout << "El video no abrio!!" << std::endl;
-        return 1;
+        return "Error al abrir video";
     }
 
     // Antes de cerrar la función, imprime las variables modificadas
@@ -751,8 +676,6 @@ int ComputerVisionWeb::mainFunction(std::string contourjson, std::string videoUr
     cv::Ptr<cv::BackgroundSubtractorMOG2> mog;
     initTracker(mog);
     cv::Mat current, result, result_big;
-    
-    std::cout << "\n\ntest\n\n" << std::endl;
 
     // Train MoG
     bool first = true;
@@ -886,7 +809,7 @@ int ComputerVisionWeb::mainFunction(std::string contourjson, std::string videoUr
     if (!vtest.isOpened())
     {
         std::cout << "El video no abrio la segunda vez!!" << std::endl;
-        return 1;
+        return "El video no abrio la segunda vez!!";
     }
 
     // Set Inverse homography and scene points for optimizing next function
@@ -1103,20 +1026,19 @@ int ComputerVisionWeb::mainFunction(std::string contourjson, std::string videoUr
     for (uint i = maxFrame - pos_correction; i <= maxFrame; ++i)
     {
         ft.processStepsWithCoverageArea(i - 1, i, ft.sframes[i]);
-        // ft.processStepsWithDistanceToCenter(i - 1, i, ft.sframes[i]);
     }
 
     std::string jsonData = buildJsonData(ft);
-    std::cout << jsonData << std::endl;
     std::string out = buildFinalOutput(jsonData, sequence);
+    std::cout << out << std::endl;
 
 #ifdef SHOW_FINAL_RESULTS
-    // std::cout << out << std::endl;
+    std::cout << out << std::endl;
 #endif
 
 #ifdef MEMORY_DEBUG
     std::cerr << "End step completion..." << std::endl;
 #endif
 
-    return 0;
+    return out;
 }
