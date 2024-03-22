@@ -383,6 +383,10 @@ void FeetTracker::processStepsWithCoverageArea(int index, int frame, cv::Mat &cu
     {
         right_step[index] = 1;
     }
+    
+    cv::Mat cur_copy2;
+    int index_contour = intersectsObjective(cur_copy2, index, frame, left, left_step[index], right, right_step[index]);
+
 
 #ifdef SHOW_FINAL_RESULTS
     std::cout << "Processed step index: " << index << std::endl;
@@ -402,9 +406,6 @@ void FeetTracker::processStepsWithCoverageArea(int index, int frame, cv::Mat &cu
         std::cout << "Right foot position:" << p.x << ", " << p.y << std::endl;
     }
 
-    cv::Mat cur_copy2;
-
-    int index_contour = intersectsObjective(cur_copy2, index, frame, left, left_step[index], right, right_step[index]);
 
     sframes[frame].copyTo(cur_copy2);
     if (left_step[index])
@@ -491,7 +492,7 @@ void FeetTracker::processSteps(int index, int frame, cv::Mat &current, std::map<
     if (showSteps)
     {
         cv::resize(cur_copy2, cur_copy2, cv::Size(current.cols * 3, current.rows * 3));
-        cv::imshow("Steps Smooth", cur_copy2);
+        //cv::imshow("Steps Smooth", cur_copy2);
         // cv::waitKey(0);
     }
 }
@@ -1524,7 +1525,7 @@ void FeetTracker::trackPositions(int frame, cv::Rect &pos, cv::Mat &pmask, cv::M
     { // Save results
         current_phantom.copyTo(cur_copy);
         // cv::resize(cur_copy, cur_copy, cv::Size(current_phantom.cols*3, current_phantom.rows*3));
-        cv::imshow("Tracking", cur_copy);
+        //cv::imshow("Tracking", cur_copy);
         //       cv::waitKey(0);
     }
 }
@@ -1743,7 +1744,7 @@ void FeetTracker::completeTracking(int frame_to_start)
         { // Save results
             current_phantom.copyTo(cur_copy);
             //            cv::resize(cur_copy, cur_copy, cv::Size(current_phantom.cols*3, current_phantom.rows*3));
-            cv::imshow("Tracking", cur_copy);
+            //cv::imshow("Tracking", cur_copy);
             //           cv::waitKey(0);
         }
     }
@@ -1861,7 +1862,7 @@ cv::Point2f FeetTracker::getStepPosition(int frame, cv::Rect &feet)
 {
     cv::Point2f pixel_pos;
     cv::Mat &mask = smasks[frame];
-    cv::imshow("Mask in Pos", mask);
+    //cv::imshow("Mask in Pos", mask);
 
     if (feet.x < 0)
     {
