@@ -71,7 +71,7 @@ app.post('/autoAnalysis', function(req, res, next) {
   let response = autoAnalysis(req.body.contourjson, req.body.videoUrl, req.body.imageUrl, req.body.jsonString);
   let json = JSON.parse(response.replace(/'/g,'"'));
   console.log(json);
-  if(json.status == 0){
+  if(json.output){
       res.status(200).json({stateFinal:"OK!",response:json})
   }else{
       res.status(400).send({stateFinal:"Error!"})
