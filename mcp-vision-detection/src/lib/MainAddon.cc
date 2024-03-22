@@ -5,6 +5,7 @@ void MainAddon::Init(Local<Object> target) {
   Nan::SetMethod(target, "createImage", CreateImage);
   Nan::SetMethod(target, "setCalibrationAutomatic", SetCalibrationAutomatic);
   Nan::SetMethod(target, "setCalibrationSemiAutomatic", SetCalibrationSemiAutomatic);
+  Nan::SetMethod(target, "autoAnalysis", AutoAnalysis);
 }
 
 NAN_METHOD(MainAddon::CreateImage) {
@@ -211,5 +212,40 @@ NAN_METHOD(MainAddon::SetCalibrationSemiAutomatic) {
   
   // Convierte el objeto de respuesta en una cadena JSON
   v8::Local<v8::String> jsonResponse = JSON::Stringify(isolate->GetCurrentContext(), responseObject).ToLocalChecked();
+  info.GetReturnValue().Set(jsonResponse);
+}
+
+NAN_METHOD(MainAddon::AutoAnalysis) {
+  
+  v8::Isolate* isolate = info.GetIsolate();
+
+  v8::String::Utf8Value v8Contourjson(isolate, info[0]);
+  std::string contourjson(*v8Contourjson);
+
+  v8::String::Utf8Value v8VideoUrl(isolate, info[1]);
+  std::string videoUrl(*v8VideoUrl);
+
+  v8::String::Utf8Value v8ImageUrl(isolate, info[2]);
+  std::string imageUrl(*v8ImageUrl);
+
+  v8::String::Utf8Value v8JsonString(isolate, info[3]);
+  std::string jsonString(*v8JsonString);
+
+  // ============================================================================================= /
+  ComputerVisionWeb CVW = ComputerVisionWeb();
+  std::string response = CVW.mainFunction(contourjson, videoUrl, imageUrl, jsonString);
+
+  // Crea un nuevo objeto de respuesta
+  v8::Local<v8::Object> responseObject = Nan::New<v8::Object>();
+  
+  // Configura la propiedad 'output' en el objeto de respuesta
+  Nan::Set(responseObject, Nan::New("output").ToLocalChecked(), Nan::New(response).ToLocalChecked());
+
+  // Convierte el objeto de respuesta en una cadena JSON
+  v8::Local<v8::Context> context = Nan::GetCurrentContext();
+  v8::Local<v8::String> jsonResponse = Nan::To<v8::String>(
+    JSON::Stringify(context, responseObject).ToLocalChecked()
+  ).ToLocalChecked();
+
   info.GetReturnValue().Set(jsonResponse);
 }

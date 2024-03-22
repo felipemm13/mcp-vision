@@ -1,30 +1,14 @@
 #ifndef Calibration_fixed_H
 #define Calibration_fixed_H
 
-
-#include <iostream>
-#include <curl/curl.h>
-#include <jsoncpp/json/json.h>
-#include <fstream>
-#include <map>
-#include <deque>
-#include <string>
-
-#define _USE_MATH_DEFINES
-#include <cmath>
-
-#include <opencv2/opencv.hpp>
-#include <opencv2/calib3d/calib3d_c.h>
-
-#include <chrono>
-
 #include "ConvertImage.h"
+
+using namespace std;
 
 //#define SHOW_INTERMEDIATE_RESULTS
 //#define SHOW_MAIN_RESULTS
 //#define SHOW_TEST
 
-using namespace std;
 
 struct PointWithContour {
     cv::Point3f punto;

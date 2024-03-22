@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     libopencv-dev \
     libcurl4-openssl-dev \
+    nlohmann-json3-dev \
     libjsoncpp-dev \
     && rm -rf /var/lib/apt/lists/*
 

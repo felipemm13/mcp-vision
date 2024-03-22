@@ -1,16 +1,10 @@
-#include <opencv2/opencv.hpp>
-#include<opencv2/core.hpp>
-#include <opencv2/imgcodecs.hpp>
-//#include <opencv2/imgcodecs/legacy/constants_c.h>
+#ifndef CONVERTIMAGE_H_
+#define CONVERTIMAGE_H_
 
-#include <vector>
-#include <string>
+#include "CommonDefinitions.h"
 
 using namespace std;
 using namespace cv;
-
-#ifndef CONVERTIMAGE_H_
-#define CONVERTIMAGE_H_
 
 /**
  * Classe que converte as imagens para base64 e virse e versa
