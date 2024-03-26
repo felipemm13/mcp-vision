@@ -524,6 +524,31 @@ std::pair<int, int> calculateArrivalFrame(std::vector<item> sequence) {
     }
 }
 
+// Función para imprimir los datos de un item
+void printItem(const item& it) {
+    std::cout << "Item code: " << it.code << "\n";
+    std::cout << "Intersects: " << it.intersects << "\n";
+    std::cout << "Frame: " << it.frame << "\n";
+    std::cout << "Distance Left: " << it.d_l << "\n";
+    std::cout << "Distance Right: " << it.d_r << "\n";
+    std::cout << "Step Left: " << (it.step_l ? "true" : "false") << "\n";
+    std::cout << "Step Right: " << (it.step_r ? "true" : "false") << "\n";
+    std::cout << "----------------------\n";
+}
+
+// Función para imprimir los datos de una Section
+void printSection(const Section& sec) {
+    std::cout << "Section Error: " << (sec.error ? "true" : "false") << "\n";
+    std::cout << "Takeoff Frame: " << sec.takeoff_frame << "\n";
+    std::cout << "Arrival Frame: " << sec.arrival_frame << "\n";
+    std::cout << "Arrival Code: " << sec.arrival_code << "\n";
+    std::cout << "Items: \n";
+    for (const auto& item : sec.items) {
+        printItem(item);
+    }
+    
+}
+
 std::string toJSON(const std::vector<Section>& sections) {
     std::string json = "[\n";
     for(size_t i = 0; i < sections.size(); ++i) {
@@ -538,6 +563,9 @@ std::string toJSON(const std::vector<Section>& sections) {
         json += "\n";
     }
     json += "]";
+
+    printSection(sections);
+
     return json;
 }
 
