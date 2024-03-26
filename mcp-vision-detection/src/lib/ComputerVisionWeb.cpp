@@ -524,31 +524,6 @@ std::pair<int, int> calculateArrivalFrame(std::vector<item> sequence) {
     }
 }
 
-// Función para imprimir los datos de un item
-void printItem(const item& it) {
-    std::cout << "Item code: " << it.code << "\n";
-    std::cout << "Intersects: " << it.intersects << "\n";
-    std::cout << "Frame: " << it.frame << "\n";
-    std::cout << "Distance Left: " << it.d_l << "\n";
-    std::cout << "Distance Right: " << it.d_r << "\n";
-    std::cout << "Step Left: " << (it.step_l ? "true" : "false") << "\n";
-    std::cout << "Step Right: " << (it.step_r ? "true" : "false") << "\n";
-    std::cout << "----------------------\n";
-}
-
-// Función para imprimir los datos de una Section
-void printSection(const Section& sec) {
-    std::cout << "Section Error: " << (sec.error ? "true" : "false") << "\n";
-    std::cout << "Takeoff Frame: " << sec.takeoff_frame << "\n";
-    std::cout << "Arrival Frame: " << sec.arrival_frame << "\n";
-    std::cout << "Arrival Code: " << sec.arrival_code << "\n";
-    std::cout << "Items: \n";
-    for (const auto& item : sec.items) {
-        printItem(item);
-    }
-    
-}
-
 std::string toJSON(const std::vector<Section>& sections) {
     std::string json = "[\n";
     for(size_t i = 0; i < sections.size(); ++i) {
@@ -564,7 +539,37 @@ std::string toJSON(const std::vector<Section>& sections) {
     }
     json += "]";
 
-    printSection(sections);
+    std::string json2 = "[\n";
+    for(size_t i = 0; i < sections.size(); ++i) {
+        const Section& sec = sections[i];
+        json2 += "    {\n";
+        json2 += "    \"id_sequence\": " + std::to_string(i) + ",\n";
+        json2 += "    \"takeoff_frame\": " + std::to_string(sec.takeoff_frame) + ",\n";
+        json2 += "    \"arrival_frame\": " + std::to_string(sec.arrival_frame) + ",\n";
+        json2 += "    \"error\": " + std::string(sec.error ? "true" : "false") + ",\n";
+        json2 += "    \"items\": [\n";
+        for (size_t j = 0; j < sec.items.size(); ++j) {
+            const item& it = sec.items[j];
+            json2 += "        {\n";
+            json2 += "        \"code\": " + std::to_string(it.code) + ",\n";
+            json2 += "        \"intersects\": " + std::to_string(it.intersects) + ",\n";
+            json2 += "        \"frame\": " + std::to_string(it.frame) + ",\n";
+            json2 += "        \"d_l\": " + std::to_string(it.d_l) + ",\n";
+            json2 += "        \"d_r\": " + std::to_string(it.d_r) + ",\n";
+            json2 += "        \"step_l\": " + std::string(it.step_l ? "true" : "false") + ",\n";
+            json2 += "        \"step_r\": " + std::string(it.step_r ? "true" : "false") + "\n";
+            json2 += "        }";
+            if (j < sec.items.size() - 1) json2 += ",";
+            json2 += "\n";
+        }
+        json2 += "    ]\n";
+        json2 += "    }";
+        if (i < sections.size() - 1) json2 += ",";
+        json2 += "\n";
+    }
+    json2 += "]";
+
+    std::cout << "JSON NUEVO \n\n" << json2 << std::endl;
 
     return json;
 }
