@@ -577,9 +577,9 @@ std::string toJSON(const std::vector<Section>& sections) {
 void calculateError(std::vector<Section> &user_sequence, std::vector<MarkAndTime> &real_sequences){
     for (int i = 0 ; i < user_sequence.size() ; i++) {
         if (user_sequence[i].arrival_code == real_sequences[i].mark_correct){
-            user_sequence[i].error = 0;
+            user_sequence[i].error = false;
         }else{
-            user_sequence[i].error = 1;
+            user_sequence[i].error = true;
         }
     }
 }
@@ -709,15 +709,15 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
         return "Error al abrir video";
     }
 
-    std::cout << "Contornos:\n";
-    for (const auto& contorno : contornos) {
-        std::cout << "Contorno - X: " << contorno.x << ", Y: " << contorno.y << ", Z: " << contorno.z << ", indiceContorno: " << contorno.indiceContorno << "\n";
-        std::cout << "Puntos:";
-        for (const auto& punto : contorno.points) {
-            std::cout << " (" << punto.x << ", " << punto.y << ")";
-        }
-        std::cout << std::endl;
-    }
+    // std::cout << "Contornos:\n";
+    // for (const auto& contorno : contornos) {
+    //     std::cout << "Contorno - X: " << contorno.x << ", Y: " << contorno.y << ", Z: " << contorno.z << ", indiceContorno: " << contorno.indiceContorno << "\n";
+    //     std::cout << "Puntos:";
+    //     for (const auto& punto : contorno.points) {
+    //         std::cout << " (" << punto.x << ", " << punto.y << ")";
+    //     }
+    //     std::cout << std::endl;
+    // }
 
     std::cout << "Sequence:\n";
     for (const auto& markTime : sequence) {
