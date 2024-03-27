@@ -574,6 +574,43 @@ std::string toJSON(const std::vector<Section>& sections) {
     return json;
 }
 
+void calculateError(std::vector<Section> &user_sequence, std::vector<MarkAndTime> &real_sequences){
+    for (int i = 0 ; i < user_sequence.size() ; i++) {
+        if (user_sequence[i].arrival_code == real_sequences[i].mark_correct){
+            user_sequence[i].error = 0;
+        }else{
+            user_sequence[i].error = 1;
+        }
+    }
+}
+
+void calculateArrivalFrameWithError(Section &sequence) {
+    float aux = FLT_MAX;
+    int outFrame = 0;
+    float minDistance = FLT_MAX; 
+    
+    for (size_t i = sequence.items.size() - 1; i > 0 ; i--) {
+        const item& current_item = sequence.items[i - 1];
+
+        if (current_item.code != 5){
+            aux = current_item.code;
+
+            for (size_t j = sequence.items.size() - 1; j > 0 ; j--) {
+                const item& current_itemsito = sequence.items[j - 1];
+                if (current_itemsito.code != aux){
+                    return ;
+                }else{
+                    float currentMinDistance = std::min(current_itemsito.d_l, current_itemsito.d_r);
+                    if (currentMinDistance < minDistance) {
+                        minDistance = currentMinDistance;
+                        sequence.arrival_frame = current_itemsito.frame;
+                    }
+                }
+            }
+        }
+    }
+}
+
 std::string ComputerVisionWeb::buildFinalOutput(std::string jsonData, std::vector<MarkAndTime> sequence) {
     // Convertir jsonData a objeto JSON
     auto j = json::parse(jsonData);
@@ -596,13 +633,21 @@ std::string ComputerVisionWeb::buildFinalOutput(std::string jsonData, std::vecto
         items.push_back({code, intersects, i, d_l, d_r, step_l, step_r});
     }
 
-    // dividir items en secuencias y calcular frames de despegue y llegada
+    // Dividir items en secuencias y calcular frames de despegue y llegada
     auto sequences = divideItemsIntoSequences(items);
     for (auto& seq : sequences) {
         seq.takeoff_frame = calculateTakeoffFrame(seq.items);
         auto result = calculateArrivalFrame(seq.items);
         seq.arrival_frame = result.first;
         seq.arrival_code = result.second;
+    }
+
+    calculateError(sequences ,sequence);
+
+    for (auto& seq : sequences) {
+        if (seq.error == 1){
+            calculateArrivalFrameWithError(seq);
+        }
     }
 
     return toJSON(sequences);;
@@ -664,9 +709,6 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
         return "Error al abrir video";
     }
 
-    // Antes de cerrar la función, imprime las variables modificadas
-
-    // Imprimir contornos
     std::cout << "Contornos:\n";
     for (const auto& contorno : contornos) {
         std::cout << "Contorno - X: " << contorno.x << ", Y: " << contorno.y << ", Z: " << contorno.z << ", indiceContorno: " << contorno.indiceContorno << "\n";
@@ -677,7 +719,6 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
         std::cout << std::endl;
     }
 
-    // Para sequence, suponiendo que parseSimpleJson y MarkAndTime están definidos correctamente
     std::cout << "Sequence:\n";
     for (const auto& markTime : sequence) {
         std::cout << "Mark: " << markTime.mark_correct << ", Time: " << markTime.frame << std::endl;
