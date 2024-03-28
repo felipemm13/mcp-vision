@@ -296,8 +296,8 @@ bool downloadFile(const std::string &url, const std::string &outFilename)
 
 void downloadMedia(const std::string &videoUrl, const std::string &imageUrl)
 {
-    std::string videoFilename = "video.mp4";
-    std::string imageFilename = "bg.jpg";
+    std::string videoFilename = "/usr/src/app/mcp-vision-detection/video.mp4";
+    std::string imageFilename = "/usr/src/app/mcp-vision-detection/bg.jpg";
 
     if (downloadFile(videoUrl, videoFilename))
     {
@@ -318,24 +318,17 @@ void downloadMedia(const std::string &videoUrl, const std::string &imageUrl)
     }
 }
 
-std::vector<MarkAndTime> parseSimpleJson(const std::string &jsonString)
-{
+std::vector<MarkAndTime> parseSimpleJson(const std::string &jsonString) {
+    auto j = json::parse(jsonString);
     std::vector<MarkAndTime> marks;
-    std::istringstream stream(jsonString);
-    std::string line;
-
-    while (std::getline(stream, line))
-    {
-        if (line.find("mark_correct") != std::string::npos)
-        {
-            MarkAndTime mark;
-            mark.mark_correct = std::stoi(line.substr(line.find(":") + 1));
-            std::getline(stream, line);
-            mark.frame = std::stoi(line.substr(line.find(":") + 1));
-            marks.push_back(mark);
-        }
+    
+    for (const auto& item : j) {
+        MarkAndTime mark;
+        mark.mark_correct = item["mark_correct"].get<int>();
+        mark.frame = item["frame"].get<int>();
+        marks.push_back(mark);
     }
-
+    
     return marks;
 }
 
@@ -545,7 +538,77 @@ std::string toJSON(const std::vector<Section>& sections) {
         json += "\n";
     }
     json += "]";
+
+    std::string json2 = "[\n";
+    for(size_t i = 0; i < sections.size(); ++i) {
+        const Section& sec = sections[i];
+        json2 += "    {\n";
+        json2 += "    \"id_sequence\": " + std::to_string(i) + ",\n";
+        json2 += "    \"takeoff_frame\": " + std::to_string(sec.takeoff_frame) + ",\n";
+        json2 += "    \"arrival_frame\": " + std::to_string(sec.arrival_frame) + ",\n";
+        json2 += "    \"error\": " + std::string(sec.error ? "true" : "false") + ",\n";
+        json2 += "    \"items\": [\n";
+        for (size_t j = 0; j < sec.items.size(); ++j) {
+            const item& it = sec.items[j];
+            json2 += "        {\n";
+            json2 += "        \"code\": " + std::to_string(it.code) + ",\n";
+            json2 += "        \"intersects\": " + std::to_string(it.intersects) + ",\n";
+            json2 += "        \"frame\": " + std::to_string(it.frame) + ",\n";
+            json2 += "        \"d_l\": " + std::to_string(it.d_l) + ",\n";
+            json2 += "        \"d_r\": " + std::to_string(it.d_r) + ",\n";
+            json2 += "        \"step_l\": " + std::string(it.step_l ? "true" : "false") + ",\n";
+            json2 += "        \"step_r\": " + std::string(it.step_r ? "true" : "false") + "\n";
+            json2 += "        }";
+            if (j < sec.items.size() - 1) json2 += ",";
+            json2 += "\n";
+        }
+        json2 += "    ]\n";
+        json2 += "    }";
+        if (i < sections.size() - 1) json2 += ",";
+        json2 += "\n";
+    }
+    json2 += "]";
+
+    std::cout << "JSON NUEVO \n\n" << json2 << std::endl;
+
     return json;
+}
+
+void calculateError(std::vector<Section> &user_sequence, std::vector<MarkAndTime> &real_sequences){
+    for (int i = 0 ; i < user_sequence.size() ; i++) {
+        if (user_sequence[i].arrival_code == real_sequences[i].mark_correct){
+            user_sequence[i].error = false;
+        }else{
+            user_sequence[i].error = true;
+        }
+    }
+}
+
+void calculateArrivalFrameWithError(Section &sequence) {
+    float aux = FLT_MAX;
+    int outFrame = 0;
+    float minDistance = FLT_MAX; 
+    
+    for (size_t i = sequence.items.size() - 1; i > 0 ; i--) {
+        const item& current_item = sequence.items[i - 1];
+
+        if (current_item.code != 5){
+            aux = current_item.code;
+
+            for (size_t j = sequence.items.size() - 1; j > 0 ; j--) {
+                const item& current_itemsito = sequence.items[j - 1];
+                if (current_itemsito.code != aux){
+                    return ;
+                }else{
+                    float currentMinDistance = std::min(current_itemsito.d_l, current_itemsito.d_r);
+                    if (currentMinDistance < minDistance) {
+                        minDistance = currentMinDistance;
+                        sequence.arrival_frame = current_itemsito.frame;
+                    }
+                }
+            }
+        }
+    }
 }
 
 std::string ComputerVisionWeb::buildFinalOutput(std::string jsonData, std::vector<MarkAndTime> sequence) {
@@ -570,13 +633,21 @@ std::string ComputerVisionWeb::buildFinalOutput(std::string jsonData, std::vecto
         items.push_back({code, intersects, i, d_l, d_r, step_l, step_r});
     }
 
-    // dividir items en secuencias y calcular frames de despegue y llegada
+    // Dividir items en secuencias y calcular frames de despegue y llegada
     auto sequences = divideItemsIntoSequences(items);
     for (auto& seq : sequences) {
         seq.takeoff_frame = calculateTakeoffFrame(seq.items);
         auto result = calculateArrivalFrame(seq.items);
         seq.arrival_frame = result.first;
         seq.arrival_code = result.second;
+    }
+
+    calculateError(sequences ,sequence);
+
+    for (auto& seq : sequences) {
+        if (seq.error == 1){
+            calculateArrivalFrameWithError(seq);
+        }
     }
 
     return toJSON(sequences);;
@@ -615,8 +686,8 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
     // Video e imagen
     downloadMedia(videoUrl, imageUrl);
 
-    std::string urlVideo = "video.mp4";
-    std::string urlBG = "bg.jpg";
+    std::string urlVideo = "/usr/src/app/mcp-vision-detection/video.mp4";
+    std::string urlBG = "/usr/src/app/mcp-vision-detection/bg.jpg";
 
     int real_w, real_h;
     int calib_w = std::stoi(string_calib_w);
@@ -638,20 +709,16 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
         return "Error al abrir video";
     }
 
-    // Antes de cerrar la función, imprime las variables modificadas
+    // std::cout << "Contornos:\n";
+    // for (const auto& contorno : contornos) {
+    //     std::cout << "Contorno - X: " << contorno.x << ", Y: " << contorno.y << ", Z: " << contorno.z << ", indiceContorno: " << contorno.indiceContorno << "\n";
+    //     std::cout << "Puntos:";
+    //     for (const auto& punto : contorno.points) {
+    //         std::cout << " (" << punto.x << ", " << punto.y << ")";
+    //     }
+    //     std::cout << std::endl;
+    // }
 
-    // Imprimir contornos
-    std::cout << "Contornos:\n";
-    for (const auto& contorno : contornos) {
-        std::cout << "Contorno - X: " << contorno.x << ", Y: " << contorno.y << ", Z: " << contorno.z << ", indiceContorno: " << contorno.indiceContorno << "\n";
-        std::cout << "Puntos:";
-        for (const auto& punto : contorno.points) {
-            std::cout << " (" << punto.x << ", " << punto.y << ")";
-        }
-        std::cout << std::endl;
-    }
-
-    // Para sequence, suponiendo que parseSimpleJson y MarkAndTime están definidos correctamente
     std::cout << "Sequence:\n";
     for (const auto& markTime : sequence) {
         std::cout << "Mark: " << markTime.mark_correct << ", Time: " << markTime.frame << std::endl;
