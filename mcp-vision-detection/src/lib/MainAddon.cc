@@ -23,8 +23,6 @@ NAN_METHOD(MainAddon::CreateImage) {
 
 }
 
-
-
 NAN_METHOD(MainAddon::SetCalibrationAutomatic){
   v8::Isolate* isolate = info.GetIsolate();
   
