@@ -576,10 +576,21 @@ std::string toJSON(const std::vector<Section>& sections) {
 
 void calculateError(std::vector<Section> &user_sequence, std::vector<MarkAndTime> &real_sequences){
     for (int i = 0 ; i < user_sequence.size() ; i++) {
-        if (user_sequence[i].arrival_code == real_sequences[i].mark_correct){
-            user_sequence[i].error = false;
-        }else{
-            user_sequence[i].error = true;
+        // Verificamos si estamos en la última iteración
+        if (i == user_sequence.size() - 1) {
+            // Para la última marca, solo necesitas verificar si el usuario fue a la marca correcta y si fue despues del estimulo.
+            if (user_sequence[i].arrival_code == real_sequences[i].mark_correct) {
+                user_sequence[i].error = false;
+            } else {
+                user_sequence[i].error = true;
+            }
+        } else {
+            /* Verificamos si el usuario fue a la marca correcta && Si el usuario llegó a la marca en el tiempo correcto*/
+            if (user_sequence[i].arrival_code == real_sequences[i].mark_correct && (user_sequence[i].arrival_frame >= real_sequences[i].frame && user_sequence[i].arrival_frame < real_sequences[i+1].frame) ){
+                user_sequence[i].error = false;
+            }else{
+                user_sequence[i].error = true;
+            }
         }
     }
 }
