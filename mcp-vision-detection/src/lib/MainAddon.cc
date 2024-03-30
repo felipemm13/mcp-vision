@@ -229,9 +229,12 @@ NAN_METHOD(MainAddon::AutoAnalysis) {
   v8::String::Utf8Value v8JsonString(isolate, info[3]);
   std::string jsonString(*v8JsonString);
 
+  v8::String::Utf8Value v8FrameRate(isolate, info[4]);
+  std::string frameRate(*v8FrameRate);
+
   // ============================================================================================= /
   ComputerVisionWeb CVW = ComputerVisionWeb();
-  std::string response = CVW.mainFunction(contourjson, videoUrl, imageUrl, jsonString);
+  std::string response = CVW.mainFunction(contourjson, videoUrl, imageUrl, jsonString, frameRate);
 
   // Crea un nuevo objeto de respuesta
   v8::Local<v8::Object> responseObject = Nan::New<v8::Object>();

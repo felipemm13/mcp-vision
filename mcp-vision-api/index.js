@@ -51,7 +51,7 @@ app.post('/calibration_semiautomatic', function(req, res, next) {
 
 app.post('/autoAnalysis', function(req, res, next) {
   console.log("Automatic Analysis running...")
-  let response = autoAnalysis(req.body.contourjson, req.body.videoUrl, req.body.imageUrl, req.body.jsonString);
+  let response = autoAnalysis(req.body.contourjson, req.body.videoUrl, req.body.imageUrl, req.body.jsonString, req.body.frameRate);
   let json = JSON.parse(response.replace(/'/g,'"'));
   console.log(json);
   if(json.output){

@@ -414,7 +414,7 @@ void FeetTracker::processSteps(int index, int frame, cv::Mat &current, std::map<
 
 void FeetTracker::setFeetPositionsByBBox(int frame, cv::Rect &pos, cv::Mat &pmask)
 {
-    float feet_proportion = 0.125, max_search = 0.3; // According to typical human proportions
+    float feet_proportion = 0.125, max_search = 0.45; // According to typical human proportions
     uint h, href;
     std::vector<cv::Rect> bboxes;
     std::vector<cv::Rect> nbboxes;
@@ -1742,28 +1742,89 @@ void FeetTracker::smoothBBoxes(int index)
     right_rects_s[index] = cv::Rect(sum_x_right - sum_w_right / 2, sum_y_right - sum_h_right / 2, sum_w_right, sum_h_right);
 }
 
-bool FeetTracker::leftStepCriteria(int index)
-{
-    if (abs(Dx_left_s[index]) + abs(Dy_left_s[index]) < min_displacement)
-        return true;
+bool FeetTracker::orientation_change(int index, int value, bool left, bool is_x) {
+    if(value == 0)
+        return false;
+    int d, acc_d=0, i, last_step_idx = left ? last_step_left_idx : last_step_right_idx,
+        crit = (last_step_idx == -1) ? 0 : last_step_idx;
+
+    std::vector<int>& D = left ? (is_x ? Dx_left_s : Dy_left_s) : (is_x ? Dx_right_s : Dy_right_s);
+
+    for(i=index-1; i>=crit; --i) {
+        d = D[i];
+        acc_d += d;
+        if(d == 0)
+            continue;
+        if ((value>0 && d<0) || (value<0 && d>0)) {
+            if(abs(acc_d) > min_displacement)
+                return true;
+        }
+    }
+
     return false;
 }
 
-bool FeetTracker::rightStepCriteria(int index)
-{
-    if (abs(Dx_right_s[index]) + abs(Dy_right_s[index]) < min_displacement)
+bool FeetTracker::stepCriteriaAdvanced(int index, int Dx, int Dy, bool left) {
+    if(abs(Dx) < min_displacement && abs(Dy) < min_displacement) { //Evident case, no significant movement
+        if(left) {
+            last_step_left_idx = index;
+            last_step_left_bbox = left_rects_s[index];
+        } else {
+            last_step_right_idx = index;
+            last_step_right_bbox = right_rects_s[index];
+        }
         return true;
+    } else if(index > 0) { //Check displacement orientation change
+        //Flags for sign change
+        if(abs(Dy) < min_displacement) { //Insignificant y displacement
+            if(orientation_change(index, Dx, left, true)) { //If x orientation changes, means a step occured
+                if(left) {
+                    last_step_left_idx = index;
+                    last_step_left_bbox = left_rects_s[index];
+                } else {
+                    last_step_right_idx = index;
+                    last_step_right_bbox = right_rects_s[index];
+                }
+                return true;
+            }
+        } else { //Significant y displacement: check if it changes signs significantly (shall be a step)
+            if(orientation_change(index, Dy, left, false)) { //If orientation changes, means
+                if(left) {
+                    last_step_left_idx = index;
+                    last_step_left_bbox = left_rects_s[index];
+                } else {
+                    last_step_right_idx = index;
+                    last_step_right_bbox = right_rects_s[index];
+                }
+                return true;
+            }
+        }
+    }
     return false;
 }
 
-float FeetTracker::distance(cv::Point2f &p1, cv::Point2f &p2)
-{
+bool FeetTracker::leftStepCriteria(int index){
+    return leftStepCriteriaAdvanced(index);
+}
+
+bool FeetTracker::rightStepCriteria(int index){
+    return rightStepCriteriaAdvanced(index);
+}
+
+bool FeetTracker::leftStepCriteriaAdvanced(int index){
+    return stepCriteriaAdvanced(index, Dx_left_s[index], Dy_left_s[index], true);
+}
+
+bool FeetTracker::rightStepCriteriaAdvanced(int index){
+    return stepCriteriaAdvanced(index, Dx_right_s[index], Dy_right_s[index], false);
+}
+
+float FeetTracker::distance(cv::Point2f &p1, cv::Point2f &p2){
     float dx = p1.x - p2.x, dy = p1.y - p2.y;
     return sqrt(dx * dx + dy * dy);
 }
 
-cv::Point2f FeetTracker::transformInv(cv::Point2f p)
-{
+cv::Point2f FeetTracker::transformInv(cv::Point2f p){
     cv::Mat pin(3, 1, CV_64FC1);
     pin.at<double>(0, 0) = (p.x * calib_w) / real_w;
     pin.at<double>(1, 0) = (p.y * calib_h) / real_h;

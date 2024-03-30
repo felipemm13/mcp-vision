@@ -49,6 +49,11 @@ public:
     std::vector<Contour> contours;
     std::vector<int> left_intersects;
     std::vector<int> right_intersects;
+    //Last steps
+    int last_step_left_idx;
+    int last_step_right_idx;
+    cv::Rect last_step_left_bbox;
+    cv::Rect last_step_right_bbox;
 
     //Step: 0 is not; 1 is beginning; 2 is still stepping
     std::vector<int> left_step;
@@ -98,8 +103,14 @@ public:
     void completeTracking(int frame_to_start);
     void smoothDisplacement(int index);
     void smoothBBoxes(int index);
+
+    bool orientation_change(int index, int value, bool left, bool is_x);
+    bool stepCriteriaAdvanced(int index, int Dx, int Dy, bool left);
     bool leftStepCriteria(int index);
+    bool leftStepCriteriaAdvanced(int index);
     bool rightStepCriteria(int index);
+    bool rightStepCriteriaAdvanced(int index);
+
     int intersectsObjective(cv::Mat &img, int index, int frame, cv::Rect &left, bool lstep, cv::Rect &right, bool rstep);
 
     void insideObjective(int index, int frame, cv::Rect &left, bool lstep, cv::Rect &right, bool rstep);

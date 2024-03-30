@@ -35,7 +35,7 @@ En esta carpeta, se maneja un api la cual recibe las peticiones del frontend y l
 
 - **Ruta:** `/autoAnalysis`
 - **Método:** `POST`
-- **Parámetros de Entrada:** `contourjson` (output de la calibración), `videoUrl` (URL del video en el S3), `imageUrl` (URL de la imagen background en el S3), `jsonString` (Lista con los estimulos de la sesión)
+- **Parámetros de Entrada:** `contourjson` (output de la calibración), `videoUrl` (URL del video en el S3), `imageUrl` (URL de la imagen background en el S3), `jsonString` (Lista con los estimulos de la sesión), `frameRate` (Valor de fps de la camara)
 - **Descripción:** Realiza un análisis automático basado en las entradas proporcionadas y devuelve los resultados del análisis.
 
 ### mcp-vision-detection:
