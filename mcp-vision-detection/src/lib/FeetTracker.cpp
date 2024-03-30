@@ -308,7 +308,6 @@ void FeetTracker::processStepsWithCoverageArea(int index, int frame, cv::Mat &cu
     cv::Mat cur_copy2;
     int index_contour = intersectsObjective(cur_copy2, index, frame, left, left_step[index], right, right_step[index]);
 
-
 #ifdef SHOW_FINAL_RESULTS
     std::cout << "Processed step index: " << index << std::endl;
     std::cout << "Processed step frame: " << frame << std::endl;
