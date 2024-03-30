@@ -697,11 +697,10 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
     cv::VideoCapture vtest;
     vtest.open(urlVideo);
 
-    float frame_rate = 0;
+    float frame_rate = 0.0f;
     if (vtest.isOpened())
     {
-        frame_rate = std::stoi(frameRate);
-        std::cout << "\nFrame_rate: " << frame_rate << "\n" << std::endl;
+        frame_rate = std::stof(frameRate);
     }
     else
     {
@@ -746,8 +745,8 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
 
     // Train MoG
     bool first = true;
-    uint frame = 0, maxFrame, time = 0, msec_per_frame = 1000 / frame_rate,
-        initial_msec = 0, final_msec = INT_MAX;
+    uint msec_per_frame = static_cast<uint>(std::round(1000.0 / frame_rate));
+    uint frame = 0, maxFrame, time = 0, initial_msec = 0, final_msec = INT_MAX;
     cv::Mat fg;
 #ifdef SHOW_INTERMEDIATE_RESULTS
     std::cout << "MoG Training.\n\tInit time: " << initial_msec << std::endl;
