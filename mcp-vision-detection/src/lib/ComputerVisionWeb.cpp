@@ -673,6 +673,23 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
 
     std::string string_calib_w = std::to_string(root["response"]["calib_w"].asInt());
     std::string string_calib_h = std::to_string(root["response"]["calib_h"].asInt());
+    std::string H_string = root["response"]["H_string"].asString();
+
+    H_string.erase(remove(H_string.begin(), H_string.end(), '['), H_string.end());
+    H_string.erase(remove(H_string.begin(), H_string.end(), ']'), H_string.end());
+
+    std::vector<double> H_values;
+    std::stringstream ss(H_string);
+    std::string item;
+
+    while (getline(ss, item, ',')) {
+        H_values.push_back(std::stod(item));
+    }
+
+    // Imprime los valores de la homografia
+    // for (double val : H_values) {
+    //     std::cout << val << std::endl;
+    // }
     
     std::vector<Contour> contornos;
 
@@ -703,7 +720,6 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
     int real_w, real_h;
     int calib_w = std::stoi(string_calib_w);
     int calib_h = std::stoi(string_calib_h);
-
 
     cv::VideoCapture vtest;
     vtest.open(urlVideo);
@@ -887,52 +903,6 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
         return "El video no abrio la segunda vez!!";
     }
 
-    // Set Inverse homography and scene points for optimizing next function
-    std::string H_string = "[1.9752780221722848,-1.3315569413105433,614.94473698828381,"
-                           "0.0014149777183884429,-0.094732686297120838,437.58441154428328,"
-                           "-6.3759787960841727e-05,-0.0019745161334410294,1]";
-
-    // Remover los corchetes al inicio y al final de la cadena
-    H_string = H_string.substr(1, H_string.size() - 2);
-
-    // Crear un stream de la cadena para extraer los valores flotantes
-    std::istringstream ss(H_string);
-
-    // Crear la matriz de OpenCV, inicializada con ceros
-    cv::Mat H = cv::Mat::zeros(3, 3, CV_64FC1);
-
-    // Variables temporales para almacenar los valores extraídos
-    double value;
-    char comma; // Para ignorar las comas en el stream
-
-    // Un vector para almacenar todos los valores numéricos
-    std::vector<double> values;
-
-    // Extraer los valores de la cadena
-    while (ss >> value)
-    {
-        values.push_back(value);
-        ss >> comma; // Leer y descartar la coma
-    }
-
-    // Verificar si tenemos la cantidad correcta de valores para llenar la matriz H
-    if (values.size() == 9)
-    {
-        // Asignar los valores a la matriz H
-        int idx = 0;
-        for (int i = 0; i < H.rows; ++i)
-        {
-            for (int j = 0; j < H.cols; ++j)
-            {
-                H.at<double>(i, j) = values[idx++];
-            }
-        }
-    }
-    else
-    {
-        std::cerr << "Error: Número incorrecto de elementos en la cadena H_string." << std::endl;
-    }
-    ft.Hinv = H.inv();
     ft.scenePoints = scenePoints;
     ft.contours = contornos;
     ft.real_w = real_w;

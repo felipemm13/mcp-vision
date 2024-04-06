@@ -28,7 +28,6 @@ public:
     void setScenePoints(std::vector<cv::Point2f> &scenePoints);
     cv::Point2i transform(cv::Point2f p);
     cv::Point2i getPoint(cv::Point2f p);
-    cv::Mat H;
 
     int getCalibrationData(const std::string query, cv::Mat &H, int &w, int &h);
 
