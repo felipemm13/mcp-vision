@@ -67,7 +67,7 @@ cv::Mat ComputerVisionWeb::maskBiggest(cv::Mat &fg, cv::Mat &labels, cv::Mat &st
         std::cout << "NO Blob!!" << std::endl;
         return r;
     }
-    std::cout << "Biggest index is " << bindex << " with " << max << " pixels." << std::endl;
+    //std::cout << "Biggest index is " << bindex << " with " << max << " pixels." << std::endl;
 
     int x1 = x, y1 = y, x2 = x + w - 1, y2 = y + h - 1;
 
@@ -2285,7 +2285,7 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
 #ifdef SHOW_INTERMEDIATE_RESULTS
             std::cout << "Frame: " << frame << std::endl;
 #endif
-            // ft.processAvailableStepsWithCoverageArea(i);
+            ft.processAvailableStepsWithCoverageArea(i, cur_objective);
             // ft.processAvailableStepsWithDistanceToCenter(i);
         }
 

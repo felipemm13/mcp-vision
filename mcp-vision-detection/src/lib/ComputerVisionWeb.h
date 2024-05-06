@@ -2,7 +2,7 @@
 #define MAIN_H
 
 //#define SHOW_INTERMEDIATE_RESULTS
-#define SHOW_FINAL_RESULTS
+//#define SHOW_FINAL_RESULTS
 
 //#define MEMORY_DEBUG
 
