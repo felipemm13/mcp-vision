@@ -2,7 +2,8 @@
 #define MAIN_H
 
 //#define SHOW_INTERMEDIATE_RESULTS
-//#define SHOW_FINAL_RESULTS
+#define SHOW_FINAL_RESULTS
+
 //#define MEMORY_DEBUG
 
 #include "CommonDefinitions.h"
@@ -28,7 +29,6 @@ public:
     void setScenePoints(std::vector<cv::Point2f> &scenePoints);
     cv::Point2i transform(cv::Point2f p);
     cv::Point2i getPoint(cv::Point2f p);
-    cv::Mat H;
 
     int getCalibrationData(const std::string query, cv::Mat &H, int &w, int &h);
 
@@ -43,5 +43,8 @@ public:
     std::string buildJsonData(FeetTracker &ft);
     std::string mainFunction(std::string contourjson, std::string videoUrl, std::string imageUrl, std::string jsonString);
     std::string buildFinalOutput(std::string jsonData, std::vector<MarkAndTime> sequence);
+    std::string buildFinalOutputImproved(FeetTracker &ft, std::vector<MarkAndTime> sequence, int maxFrame);
+    std::string buildFinalOutputFinal(FeetTracker &ft, std::vector<MarkAndTime> sequence, int maxFrame);
 };
+
 #endif // ComputerVisionWeb_H

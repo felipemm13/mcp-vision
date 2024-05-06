@@ -57,11 +57,24 @@ struct Contour {
     int z;
     int indiceContorno;
     std::vector<cv::Point2f> points;
+    std::vector<cv::Point2i> ipoints;
 };
 
 struct MarkAndTime {
     int mark_correct;
     int frame;
 };
+
+std::vector<cv::Point2i> intersectConvexPolygons(std::vector<cv::Point2i> &p1, std::vector<cv::Point2i> &p2);
+std::vector<cv::Point2i> searchSegmentIntersections(cv::Point2i &pp1, cv::Point2i &pp2, 
+                                                    std::vector<cv::Point2i> &p, std::vector<uint> &p_inter_id);
+bool segmentIntersection(cv::Point2i &o1, cv::Point2i &p1, cv::Point2i &o2, cv::Point2i &p2, cv::Point2i &r);
+bool isPolygonIntersection(std::vector<cv::Point2i> &p1, std::vector<cv::Point2i> &p2);
+
+
+float dotProduct(const cv::Point2f &u, const cv::Point2f &v);
+float magnitude(const cv::Point2f &v);
+cv::Point2f projectVector(cv::Point2f v1, const cv::Point2f v2);
+
 
 #endif // COMMON_DEFINITIONS_H

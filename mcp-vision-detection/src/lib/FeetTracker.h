@@ -5,7 +5,7 @@
 
 //#define SHOW_INTERMEDIATE_RESULTS
 //#define SHOW_FINAL_RESULTS
-
+//#define SHOW_DEBUG_TEXT
 class FeetTracker
 {
 public:
@@ -47,12 +47,21 @@ public:
     std::vector<float> odist1;
     std::vector<float> odist2;
     std::vector<Contour> contours;
+    std::vector<Contour> contoursScene;
+    std::vector<cv::Point2f> contourCenters;
+    std::vector<cv::Point2f> contourCentersScene;
     std::vector<int> left_intersects;
     std::vector<int> right_intersects;
+    cv::Mat H; 
+    //Last steps
+    int last_step_left_idx;
+    int last_step_right_idx;
+    cv::Rect last_step_left_bbox;
+    cv::Rect last_step_right_bbox;
 
     //Step: 0 is not; 1 is beginning; 2 is still stepping
-    std::vector<int> left_step;
-    std::vector<int> right_step;
+    std::vector<bool> left_step;
+    std::vector<bool> right_step;
 
     std::vector<int> in_objective;
 
@@ -85,21 +94,27 @@ public:
     //METHODS
     inline cv::Point2i getRectCenter(cv::Rect &r);
     inline bool firstNearest(cv::Point2i &p, cv::Point2i &p1, cv::Point2i &p2);
-
+    cv::Point2f imageToScene(cv::Point2i p);
     void processSteps(int index, int frame, cv::Mat &current, std::map<int, std::vector<cv::Point2i> > &objectiveImPos);
     void processSteps(int index, int frame, std::map<int, std::vector<cv::Point2i> > &objectiveImPos);
     //void processAvailableStepsWithDistanceToCenter(int index);
     // void processStepsWithDistanceToCenter(int index, int frame, cv::Mat &current);
-    void processAvailableStepsWithCoverageArea(int index);
-    void processStepsWithCoverageArea(int index, int frame, cv::Mat &current);
+    void processAvailableStepsWithCoverageArea(int index, int cur_objective);
+    void processStepsWithCoverageArea(int index, int frame, cv::Mat &current, int cur_objective);
 
     void setFeetPositionsByBBox(int frame, cv::Rect &pos, cv::Mat &pmask);
     void trackPositions(int frame, cv::Rect &pos, cv::Mat &pmask, cv::Mat &current, int msecs, int frame_index);
     void completeTracking(int frame_to_start);
     void smoothDisplacement(int index);
     void smoothBBoxes(int index);
+
+    bool orientation_change(int index, int value, bool left, bool is_x);
+    bool stepCriteriaAdvanced(int index, int Dx, int Dy, bool left);
     bool leftStepCriteria(int index);
+    bool leftStepCriteriaAdvanced(int index);
     bool rightStepCriteria(int index);
+    bool rightStepCriteriaAdvanced(int index);
+
     int intersectsObjective(cv::Mat &img, int index, int frame, cv::Rect &left, bool lstep, cv::Rect &right, bool rstep);
 
     void insideObjective(int index, int frame, cv::Rect &left, bool lstep, cv::Rect &right, bool rstep);
@@ -107,7 +122,7 @@ public:
     int insideObjective(cv::Rect &left, bool lstep, cv::Rect &right, bool rstep, std::map<int,
                         std::vector<cv::Point2i> > &objectiveImPos);
     void drawObjectives(cv::Mat &img, int obj, std::map<int, std::vector<cv::Point2i> > &objectiveImPos);
-    void drawObjectives(cv::Mat &img, int id);
+    void drawObjectives(cv::Mat &img, int id, int cur_objective);
 
     void associateLeftAndRight(std::vector<cv::Rect> &fbboxes, cv::Rect &left, cv::Rect &right);
     void associateLeftAndRight(std::vector<cv::Rect> &near_bboxes, int near_frame,
@@ -135,14 +150,8 @@ public:
     cv::Point2f getStepPosition(int frame, cv::Rect &feet);
 
     void paintInitialFeetPositionBBoxes(std::vector<cv::Rect> &bboxes, cv::Mat &img, uchar B, uchar G, uchar R);
-
-    bool segmentIntersection(cv::Point2i &o1, cv::Point2i &p1, cv::Point2i &o2, cv::Point2i &p2, cv::Point2i &r);
-    std::vector<cv::Point2i> searchSegmentIntersections(cv::Point2i &pp1, cv::Point2i &pp2,
-                                                        std::vector<cv::Point2i> &p,
-                                                        std::vector<uint> &p_inter_id);
-    std::vector<cv::Point2i> intersectConvexPolygons(std::vector<cv::Point2i> &p_wall, std::vector<cv::Point2i> &p);
-
-
+    bool rectIntersectsContour(const cv::Rect &rect, const std::vector<cv::Point2f> &contour);
+    bool feetIntersectsObjective(cv::Rect rect, std::vector<cv::Point2i> &contour);
 //STATIC
     static void getBBoxes(cv::Mat &labels, cv::Mat &stats, std::vector<cv::Rect> &bboxes, int i_x, int i_y, std::vector<cv::Point2i> &pointInRegion);
     static void getSamplesAndBBoxesExceptLabel(cv::Mat &labels, cv::Mat &stats,
