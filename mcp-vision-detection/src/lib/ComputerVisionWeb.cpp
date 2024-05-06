@@ -318,15 +318,22 @@ void downloadMedia(const std::string &videoUrl, const std::string &imageUrl)
     }
 }
 
-std::vector<MarkAndTime> parseSimpleJson(const std::string &jsonString) {
-    auto j = json::parse(jsonString);
+std::vector<MarkAndTime> parseSimpleJson(const std::string &jsonString)
+{
     std::vector<MarkAndTime> marks;
+    std::istringstream stream(jsonString);
+    std::string line;
     
-    for (const auto& item : j) {
+    while (std::getline(stream, line))
+    {
+        if (line.find("mark_correct") != std::string::npos)
+        {
         MarkAndTime mark;
-        mark.mark_correct = item["mark_correct"].get<int>();
-        mark.frame = item["frame"].get<int>();
+            mark.mark_correct = std::stoi(line.substr(line.find(":") + 1));
+            std::getline(stream, line);
+            mark.frame = std::stoi(line.substr(line.find(":") + 1));
         marks.push_back(mark);
+        }
     }
     
     return marks;
@@ -442,6 +449,27 @@ std::vector<item> compressMarks(const std::vector<item> &marks)
     return compressedMarks;
 }
 
+std::vector<item> buildArrivals(std::vector<MarkAndTime> real_sequence, std::vector<item> player_sequence)
+{
+    std::vector<item> arrivals;
+    bool isSequenceStart = true; // Suponemos que el inicio de la lista puede ser el inicio de una secuencia
+
+    for (size_t i = 0; i < player_sequence.size(); ++i)
+    {
+        // Comprobar si estamos al inicio de una secuencia de intersects == 1
+        if (player_sequence[i].intersects == 1 && (isSequenceStart || player_sequence[i - 1].intersects == 0))
+        {
+            arrivals.push_back(player_sequence[i]); // Agregar el item al vector de llegadas
+            isSequenceStart = false;                // Actualizar el indicador de inicio de secuencia
+        }
+        else if (player_sequence[i].intersects == 0)
+        {
+            isSequenceStart = true; // Si encontramos un intersects == 0, el próximo item con intersects == 1 será el inicio de una nueva secuencia
+        }
+    }
+    return arrivals;
+}
+
 std::vector<Section> divideItemsIntoSequences(const std::vector<item>& items) {
     std::vector<Section> sequences;
     Section currentSection;
@@ -489,6 +517,7 @@ std::vector<Section> divideItemsIntoSequences(const std::vector<item>& items) {
     return sequences;
 }
 
+
 int calculateTakeoffFrame(std::vector<item> sequence) {
     for (size_t i = 1; i < sequence.size(); ++i) {
         const item& current_item = sequence[i];
@@ -498,6 +527,7 @@ int calculateTakeoffFrame(std::vector<item> sequence) {
             return current_item.frame;
         }
     }
+    return 0;
 }
 
 std::pair<int, int> calculateArrivalFrame(std::vector<item> sequence) {
@@ -522,7 +552,37 @@ std::pair<int, int> calculateArrivalFrame(std::vector<item> sequence) {
             }
         }
     }
+    return std::make_pair(0, 0);
+
 }
+
+void calculateArrivalFrameWithError(Section &sequence) {
+    float aux = FLT_MAX;
+    int outFrame = 0;
+    float minDistance = FLT_MAX; 
+    
+    for (size_t i = sequence.items.size() - 1; i > 0 ; i--) {
+        const item& current_item = sequence.items[i - 1];
+
+        if (current_item.code != 5){
+            aux = current_item.code;
+
+            for (size_t j = sequence.items.size() - 1; j > 0 ; j--) {
+                const item& current_itemsito = sequence.items[j - 1];
+                if (current_itemsito.code != aux){
+                    return ;
+                }else{
+                    float currentMinDistance = std::min(current_itemsito.d_l, current_itemsito.d_r);
+                    if (currentMinDistance < minDistance) {
+                        minDistance = currentMinDistance;
+                        sequence.arrival_frame = current_itemsito.frame;
+                    }
+                }
+            }
+        }
+    }
+}
+
 
 std::string toJSON(const std::vector<Section>& sections) {
     std::string json = "[\n";
@@ -595,34 +655,8 @@ void calculateError(std::vector<Section> &user_sequence, std::vector<MarkAndTime
     }
 }
 
-void calculateArrivalFrameWithError(Section &sequence) {
-    float aux = FLT_MAX;
-    int outFrame = 0;
-    float minDistance = FLT_MAX; 
-    
-    for (size_t i = sequence.items.size() - 1; i > 0 ; i--) {
-        const item& current_item = sequence.items[i - 1];
-
-        if (current_item.code != 5){
-            aux = current_item.code;
-
-            for (size_t j = sequence.items.size() - 1; j > 0 ; j--) {
-                const item& current_itemsito = sequence.items[j - 1];
-                if (current_itemsito.code != aux){
-                    return ;
-                }else{
-                    float currentMinDistance = std::min(current_itemsito.d_l, current_itemsito.d_r);
-                    if (currentMinDistance < minDistance) {
-                        minDistance = currentMinDistance;
-                        sequence.arrival_frame = current_itemsito.frame;
-                    }
-                }
-            }
-        }
-    }
-}
-
-std::string ComputerVisionWeb::buildFinalOutput(std::string jsonData, std::vector<MarkAndTime> sequence) {
+std::string ComputerVisionWeb::buildFinalOutput(std::string jsonData, std::vector<MarkAndTime> sequence)
+{
     // Convertir jsonData a objeto JSON
     auto j = json::parse(jsonData);
 
@@ -644,7 +678,7 @@ std::string ComputerVisionWeb::buildFinalOutput(std::string jsonData, std::vecto
         items.push_back({code, intersects, i, d_l, d_r, step_l, step_r});
     }
 
-    // Dividir items en secuencias y calcular frames de despegue y llegada
+    // dividir items en secuencias y calcular frames de despegue y llegada
     auto sequences = divideItemsIntoSequences(items);
     for (auto& seq : sequences) {
         seq.takeoff_frame = calculateTakeoffFrame(seq.items);
@@ -664,7 +698,1168 @@ std::string ComputerVisionWeb::buildFinalOutput(std::string jsonData, std::vecto
     return toJSON(sequences);;
 }
 
-std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string videoUrl, std::string imageUrl, std::string jsonString, std::string frameRate) {
+// Per frame: Two feet. By foot: (x y w h code xp yp d)
+//  (x,y,w,h): foot rect                (left_step, right_step)
+//  code:                               (in_objective1, in_objective2)
+//      0: No step
+//    1-9: Step to nearest objective
+//  (xp,yp): Feet contact point         (left_foot, right_foot)
+//  d: distance to nearest center       (odist1, odist2)
+std::string ComputerVisionWeb::buildFinalOutputFinal(FeetTracker &ft, std::vector<MarkAndTime> sequence, int maxFrame) {
+    //in_objective1, in_objective2
+    //odist1, odist2
+    
+    for (int i = 0; i < maxFrame; ++i) {
+        std::cout << "Frame Index: " << i << "\n\tLeft: " << ft.in_objective1[i] << "\n\tRight: " << ft.in_objective2[i] << std::endl;
+        
+    }
+    
+    //Get central stimulus central position
+    cv::Point2f pcentral = ft.contourCentersScene[4];
+    
+    
+    const int relevant_change = 10; //Number of centimeters for considering relevant change in position
+    const int static_step = 15; //Number of frames for considering that step is not displacing
+    
+    int current_seq = 0, //index for starting current sequence
+        current_center_exit1 = 0, current_center_exit2 = 0, //index for exiting center on current sequence for each foot
+        next_seq = 0;  //index for starting next sequence
+    cv::Point p_out1, p_out2;
+    
+    //Variables for stimuli sequence:
+    uint n_objectives = sequence.size();
+    int i, cur_objective, cur_frame;
+
+    //Divide items in stimuli sequence data and calculate frames de despegue y llegada
+    // Lista para almacenar los resultados
+    std::vector<Section> sequences;
+    bool first_stimulus = true;
+    
+    //Get intervals per objective:
+    for (int j = 0; j < n_objectives; ++j) {
+        Section cur_section;
+        item cur_item;
+        
+        cur_objective = sequence[j].mark_correct; 
+        cur_frame = sequence[j].frame;
+
+#ifdef SHOW_DEBUG_TEXT
+        std::cout << "Marking.\n\tCurrent stimulus: " << j << std::endl;
+        std::cout << "\tCurrent stimulus objective: " << cur_objective << std::endl;
+        std::cout << "\tCurrent stimulus index: " << cur_frame << std::endl;
+#endif        
+        //Booleans for marking errors (assume right first):
+        bool step_center = true, step_objective = true, right_objective = true; 
+        
+        //Advance until both are near the 5 zone (assume that the player can be late):
+
+
+        for (i = current_seq; i < maxFrame; ++i)
+            if(ft.in_objective1[i] == 5 || ft.in_objective2[i] == 5)
+                break;
+#ifdef SHOW_DEBUG_TEXT
+        std::cout << "\tCurrent sequence start - prev cur_frame: " << current_seq << std::endl;
+#endif        
+        
+        //Update start of current seq: if stimulus presentation is higher than presence in zone 5, start from stimulus presentation frame
+        current_seq = (cur_frame >= i)? cur_frame : i;
+
+#ifdef SHOW_DEBUG_TEXT
+        std::cout << "\tCurrent sequence start - after cur_frame: " << current_seq << std::endl;
+#endif        
+
+        
+        //Search for center position exit, considered as the first step out of center zone:
+        bool step_out_detected1 = false, step_out_detected2 = false;
+        int sure_frame1, sure_frame2;
+
+        //Search for left exit:
+        for (i = current_seq; i < maxFrame; ++i) {
+            if(ft.left_step[i] == 0) //Continue until a step is detected
+                continue;
+#ifdef SHOW_DEBUG_TEXT
+        std::cout << "\tCurrent frame - search left position exit: " << i << std::endl;
+#endif        
+            //Left foot steps out:
+            if(ft.in_objective1[i] != 5) {
+#ifdef SHOW_DEBUG_TEXT
+        std::cout << "\tExit frame left - position exit: " << i << std::endl;
+        std::cout << "\tExit frame left - code found: " << ft.in_objective1[i] << std::endl;
+#endif        
+                current_center_exit1 = i;
+                p_out1 = ft.left_foot[i];
+                sure_frame1 = i;
+                step_out_detected1 = true;
+                break;
+            }            
+        }
+
+        //Search for right exit:
+        for (i = current_seq; i < maxFrame; ++i) {
+            if(ft.right_step[i] == 0) //Continue until a step is detected
+                continue;
+#ifdef SHOW_DEBUG_TEXT
+        std::cout << "\tCurrent frame - search right position exit: " << i << std::endl;
+#endif        
+            //Right foot steps out:
+            if(ft.in_objective2[i] != 5) {
+#ifdef SHOW_DEBUG_TEXT
+        std::cout << "\tExit frame right - position exit: " << i << std::endl;
+        std::cout << "\tExit frame right - code found: " << ft.in_objective2[i] << std::endl;
+#endif        
+                current_center_exit2 = i;
+                p_out2 = ft.right_foot[i];
+                sure_frame2 = i;
+                step_out_detected2 = true;
+                break;
+            }            
+        }
+
+        
+        
+        if(step_out_detected1 || step_out_detected2) { //It shall be detected... if not maybe end of stimuli sequence or player skip some stimuli
+            //Check which is the first leg going on the objective direction
+            if(!step_out_detected1) { //Give a reference the second sure step if first not found
+                p_out1 = p_out2;
+                current_center_exit1 = current_center_exit2;
+                sure_frame1 = sure_frame2;
+            }
+            if(!step_out_detected2) { //Give a reference the second sure step if first not found
+                p_out2 = p_out1;
+                current_center_exit2 = current_center_exit1;
+                sure_frame2 = sure_frame1;
+            }
+            
+            int lindex_1, lindex_2, rindex_1, rindex_2, il_found, ir_found, il_last = current_seq+1, ir_last = current_seq+1, il_initial, il_last_stepping, ir_initial, ir_last_stepping;
+            bool stepping = false, first = true, pl_found = false, pr_found = false;
+            cv::Point2f p1, p2, p_out_s = ft.imageToScene(p_out1), p_center = ft.contourCentersScene[4]; //Take central point as reference
+            float d1, d2, d, 
+                  d_center_obj = sqrt((p_out_s.x - p_center.x)*(p_out_s.x - p_center.x) + (p_out_s.y - p_center.y)*(p_out_s.y - p_center.y));
+#ifdef SHOW_DEBUG_TEXT
+                std::cout << "\tProcessing take-off left..." << std::endl;
+                std::cout << "\tCenter (x,y): " << p_center.x << ", " << p_center.y << std::endl;
+                std::cout << "\tSure out (x,y): " << p_out_s.x << ", " << p_out_s.y << std::endl;
+#endif
+
+            //Check backwards first relevant change in left step keeping going far sure feet and near center
+            for (i = sure_frame1; i >= current_seq; --i) {
+#ifdef SHOW_DEBUG_TEXT
+                std::cout << "\tTake-off - left - frame: " << i << std::endl;
+#endif                        
+                if(first) { //Search for end of first stepping
+                    if(!stepping && ft.left_step[i] == 1) { //A step
+#ifdef SHOW_DEBUG_TEXT
+                        std::cout << "\tTake-off - left - start stepping... " << std::endl;
+#endif                        
+                        stepping = true;
+                        il_last = i;
+                        il_initial = i;
+                        lindex_1 = i;
+                    } else if(stepping && ft.left_step[i] == 0) { //Is stepping, so check if it stops doing so
+#ifdef SHOW_DEBUG_TEXT
+                        std::cout << "\tTake-off - left - stop stepping... " << std::endl;
+#endif                  
+                        il_last_stepping = i-1;      
+                        stepping = false;
+                        first = false; //First index ready
+                    }
+                } else { //Search for first of following step
+                    if(ft.left_step[i] == 1) { //First position of next step
+#ifdef SHOW_DEBUG_TEXT
+                        std::cout << "\tTake-off - left - left following found... " << std::endl;
+#endif        
+                        il_last = i;
+                        lindex_2 = i;
+                        //Significant displacement criterion
+                        p1 = ft.imageToScene(ft.left_foot[lindex_1]);
+                        p2 = ft.imageToScene(ft.left_foot[lindex_2]);
+                        d  = sqrt((p2.x - p1.x)*(p2.x - p1.x) + (p2.y - p1.y)*(p2.y - p1.y));
+                        //d1 = sqrt((p_out_s.x - p1.x)*(p_out_s.x - p1.x) + (p_out_s.y - p1.y)*(p_out_s.y - p1.y));//L2 norm
+                        //d2 = sqrt((p_out_s.x - p2.x)*(p_out_s.x - p2.x) + (p_out_s.y - p2.y)*(p_out_s.y - p2.y));//L2 norm
+                        d1 = magnitude(projectVector(cv::Point2f(p1.x - p_out_s.x, p1.y - p_out_s.y), cv::Point2f(p_center.x - p_out_s.x, p_center.y - p_out_s.y)));
+                        d2 = magnitude(projectVector(cv::Point2f(p2.x - p_out_s.x, p2.y - p_out_s.y), cv::Point2f(p_center.x - p_out_s.x, p_center.y - p_out_s.y)));
+                        
+#ifdef SHOW_DEBUG_TEXT
+                        std::cout << "\tCenter (x,y): " << p_center.x << ", " << p_center.y << std::endl;
+                        std::cout << "\tSure out (x,y): " << p_out_s.x << ", " << p_out_s.y << std::endl;
+                        std::cout << "\tFoot 1 (x,y): " << p1.x << ", " << p1.y << " at index " << lindex_1 << std::endl;
+                        std::cout << "\tFoot 2 (x,y): " << p2.x << ", " << p2.y << " at index " << lindex_2 << std::endl;                        
+                        std::cout << "\tTake-off - left - distance between steps: " << d << std::endl;
+                        std::cout << "\tTake-off - left - projected distance between 1st step and objective: " << d1 << std::endl;
+                        std::cout << "\tTake-off - left - projected distance between 2nd step and objective: " << d2 << std::endl;
+                        std::cout << "\tTake-off - left - distance between center and objective: " << d_center_obj << std::endl;
+#endif
+                        if(d1 < d2 && d > relevant_change && il_initial - il_last_stepping < static_step && d2 < d_center_obj && ft.odist1[i] != 0) { //While the step is approaching to the objective and not farther than center, keep searching...
+#ifdef SHOW_DEBUG_TEXT
+                            std::cout << "\tTake-off - left - keeps approaching objective... " << std::endl;
+#endif
+                            stepping = true;                            
+                            first = true; //Consider as first again
+                            lindex_1 = lindex_2;
+                            il_initial = lindex_1;
+                            continue;
+                        }
+                                
+                        //If we reach here, it means that p1 is the take-off step
+                        pl_found = true;
+          
+#ifdef SHOW_DEBUG_TEXT
+                        std::cout << "\tTake-off - left - il initial:" << il_initial << std::endl;
+                        std::cout << "\tTake-off - left - il last stepping:" << il_last_stepping << std::endl;
+                        std::cout << "\tTake-off - left - stepping diff:" << il_initial - il_last_stepping << std::endl;
+#endif                        
+                        
+                        if(il_initial - il_last_stepping >= static_step) { //Static step, so this is considered the take-off step
+                            il_found = il_initial + 1;
+#ifdef SHOW_DEBUG_TEXT
+                            std::cout << "\tTake-off - left - static step: Found at " << il_found << "." << std::endl;
+#endif
+                            break;
+                        }
+                        
+                        if(d <= relevant_change) { // If two little steps, assume second is the take_off
+                            il_found = lindex_2+1;
+#ifdef SHOW_DEBUG_TEXT
+                            std::cout << "\tTake-off - left - irrelevant step distance: Found at " << il_found << "." << std::endl;
+#endif        
+
+                            break;
+                        }
+                        
+                        if(d1 > d2) { //If p1 is farther than p2, it is the take-off step
+                            il_found = il_initial + 1;
+#ifdef SHOW_DEBUG_TEXT
+                            std::cout << "\tTake-off - left - first step farther than second: Found at " << il_found << ". " << std::endl;
+#endif
+                        } else { //Else, p2 is.                            
+                            il_found = lindex_2+1;
+#ifdef SHOW_DEBUG_TEXT
+                            std::cout << "\tTake-off - left - second step farther than first: Found at " << il_found << ". " << std::endl;
+#endif
+                        }
+                        break;
+                    }
+                }
+            }
+            //If left not found, take last frame stepping as take-off:
+            if(!pl_found) {
+                il_found = il_last + 1;
+                pl_found = true;
+#ifdef SHOW_DEBUG_TEXT
+                std::cout << "\tTake-off - left - not found so take last step: Found at " << il_found << ". " << std::endl;
+#endif
+            }
+
+            //Now check first relevant change in right step
+            stepping = false; 
+            first = true;
+            p_out_s = ft.imageToScene(p_out2);
+            d_center_obj = sqrt((p_out_s.x - p_center.x)*(p_out_s.x - p_center.x) + (p_out_s.y - p_center.y)*(p_out_s.y - p_center.y));
+#ifdef SHOW_DEBUG_TEXT
+            std::cout << "\tProcessing take-off right..." << std::endl;
+            std::cout << "\tCenter (x,y): " << p_center.x << ", " << p_center.y << std::endl;
+            std::cout << "\tSure out (x,y): " << p_out_s.x << ", " << p_out_s.y << std::endl;
+#endif
+            for (i = sure_frame2; i >= current_seq; --i) {
+#ifdef SHOW_DEBUG_TEXT
+                std::cout << "\tTake-off - right - frame: " << i << std::endl;
+#endif                        
+                if(first) { //Search for end of first stepping
+                    if(!stepping && ft.right_step[i] == 1) { //A step
+#ifdef SHOW_DEBUG_TEXT
+                        std::cout << "\tTake-off - right - start stepping... " << std::endl;
+#endif                        
+                        stepping = true;
+                        ir_last = i;
+                        ir_initial = i;
+                        rindex_1 = i;
+                    } else if(stepping && ft.right_step[i] == 0) { //Is stepping, so check if it stops doing so
+#ifdef SHOW_DEBUG_TEXT
+                        std::cout << "\tTake-off - right - stop stepping... " << std::endl;
+#endif                  
+                        ir_last_stepping = i+1;
+                        stepping = false;
+                        first = false; //First index ready
+                    }
+                } else { //Search for first of following step
+                    if(ft.right_step[i] == 1) { //First position of next step
+#ifdef SHOW_DEBUG_TEXT
+                        std::cout << "\tTake-off - right - right following found... " << std::endl;
+#endif        
+                        ir_last = i;
+                        rindex_2 = i;
+                        //Significant displacement criterion
+                        p1 = ft.imageToScene(ft.right_foot[rindex_1]);
+                        p2 = ft.imageToScene(ft.right_foot[rindex_2]);
+                        d  = sqrt((p2.x - p1.x)*(p2.x - p1.x) + (p2.y - p1.y)*(p2.y - p1.y));
+//                        d1 = sqrt((p_out_s.x - p1.x)*(p_out_s.x - p1.x) + (p_out_s.y - p1.y)*(p_out_s.y - p1.y));//L2 norm
+//                        d2 = sqrt((p_out_s.x - p2.x)*(p_out_s.x - p2.x) + (p_out_s.y - p2.y)*(p_out_s.y - p2.y));//L2 norm
+                        d1 = magnitude(projectVector(cv::Point2f(p1.x - p_out_s.x, p1.y - p_out_s.y), cv::Point2f(p_center.x - p_out_s.x, p_center.y - p_out_s.y)));
+                        d2 = magnitude(projectVector(cv::Point2f(p2.x - p_out_s.x, p2.y - p_out_s.y), cv::Point2f(p_center.x - p_out_s.x, p_center.y - p_out_s.y)));
+
+#ifdef SHOW_DEBUG_TEXT
+                        std::cout << "\tCenter (x,y): " << p_center.x << ", " << p_center.y << std::endl;
+                        std::cout << "\tSure out (x,y): " << p_out_s.x << ", " << p_out_s.y << std::endl;
+                        std::cout << "\tFoot 1 (x,y): " << p1.x << ", " << p1.y << " at index " << rindex_1 << std::endl;
+                        std::cout << "\tFoot 2 (x,y): " << p2.x << ", " << p2.y << " at index " << rindex_2 << std::endl;   
+                        std::cout << "\tTake-off - right - distance between steps: " << d << std::endl;
+                        std::cout << "\tTake-off - right - projected distance between 1st step and objective: " << d1 << std::endl;
+                        std::cout << "\tTake-off - right - projected distance between 2nd step and objective: " << d2 << std::endl;
+                        std::cout << "\tTake-off - right - distance between center and objective: " << d_center_obj << std::endl;
+#endif
+                        if(d1 < d2 && d > relevant_change && ir_initial - ir_last_stepping < static_step && d2 < d_center_obj  && ft.odist2[i] != 0) { //While the step is approaching to the objective and not farther than center, keep searching...
+#ifdef SHOW_DEBUG_TEXT
+                            std::cout << "\tTake-off - right - keeps approaching objective... " << std::endl;
+#endif
+                            stepping = true;                            
+                            first = true; //Consider as first again
+                            rindex_1 = rindex_2;
+                            ir_initial = rindex_1;
+                            continue;
+                        }
+                                
+                        //If we reach here, it means that p1 is the take-off step
+                        pr_found = true;
+#ifdef SHOW_DEBUG_TEXT
+                        std::cout << "\tTake-off - right - ir initial:" << ir_initial << std::endl;
+                        std::cout << "\tTake-off - right - ir last stepping:" << ir_last_stepping << std::endl;
+                        std::cout << "\tTake-off - right - stepping diff:" << ir_initial - ir_last_stepping << std::endl;
+#endif        
+                        
+                        if(ir_initial - ir_last_stepping >= static_step) { //Static step, so this is considered the take-off step
+                            ir_found = ir_initial + 1;
+#ifdef SHOW_DEBUG_TEXT
+                            std::cout << "\tTake-off - right - static step: Found at " << ir_found << "." << std::endl;
+#endif        
+                            break;
+                        }
+                        
+                        if(d <= relevant_change) { // If two little steps, assume second is the take_off
+                            ir_found = rindex_2+1;
+#ifdef SHOW_DEBUG_TEXT
+                            std::cout << "\tTake-off - right - irrelevant step distance: Found at " << ir_found << "." << std::endl;
+#endif        
+                            break;
+                        }
+                        
+                        if(d1 > d2) { //If p1 is farther than p2, it is the take-off step
+                            ir_found = ir_initial+1;
+#ifdef SHOW_DEBUG_TEXT
+                            std::cout << "\tTake-off - right - first step farther than second: Found at " << ir_found << "." << std::endl;
+#endif
+                        } else { //Else, p2 is.                            
+                            ir_found = rindex_2+1;
+#ifdef SHOW_DEBUG_TEXT
+                            std::cout << "\tTake-off - right - second step farther than first: Found at " << ir_found << "." << std::endl;
+#endif
+                        }
+                        break;
+                    }
+                }
+            }
+            //If left not found, take last frame stepping as take-off:
+            if(!pr_found) {
+                ir_found = ir_last + 1;
+                pr_found = true;
+#ifdef SHOW_DEBUG_TEXT
+                std::cout << "\tTake-off - right - not found so take last step: Found at " << ir_found << ". " << std::endl;
+#endif
+            }
+            
+            //Set take-off frame:
+            if(pl_found && pr_found) {
+                if(il_found < ir_found) { //Take-off is from left
+                    cur_item.code = 5;
+                    cur_item.d_l = ft.odist1[il_found];
+                    cur_item.d_r = ft.odist2[ir_found];
+                    cur_item.step_l = true;
+                    cur_item.step_r = false;
+                    cur_item.frame = il_found;
+                    cur_section.items.push_back(cur_item);
+                    cur_section.takeoff_frame = il_found;
+#ifdef SHOW_DEBUG_TEXT
+                    std::cout << "\tTake-off: Both found - decided left" << std::endl;
+#endif
+                } else {
+                    cur_item.code = 5;
+                    cur_item.d_l = ft.odist1[il_found];
+                    cur_item.d_r = ft.odist2[ir_found];
+                    cur_item.step_l = false;
+                    cur_item.step_r = true;
+                    cur_item.frame = ir_found;                    
+                    cur_section.items.push_back(cur_item);
+                    cur_section.takeoff_frame = ir_found;
+#ifdef SHOW_DEBUG_TEXT
+                    std::cout << "\tTake-off: Both found - decided right" << std::endl;
+#endif
+                }
+            } else if(pl_found) {
+                cur_item.code = 5;
+                cur_item.d_l = ft.odist1[il_found];
+                cur_item.d_r = ft.odist2[il_last];
+                cur_item.step_l = true;
+                cur_item.step_r = false;
+                cur_item.frame = il_found;
+                cur_section.items.push_back(cur_item);
+                cur_section.takeoff_frame = il_found;
+#ifdef SHOW_DEBUG_TEXT
+                std::cout << "\tTake-off: One found - left" << std::endl;
+#endif
+            } else if (pr_found) {
+                cur_item.code = 5;
+                cur_item.d_l = ft.odist1[il_found];
+                cur_item.d_r = ft.odist2[ir_found];
+                cur_item.step_l = false;
+                cur_item.step_r = true;
+                cur_item.frame = ir_found;                                    
+                cur_section.items.push_back(cur_item);
+                cur_section.takeoff_frame = ir_found;
+#ifdef SHOW_DEBUG_TEXT
+                std::cout << "\tTake-off: One found - right" << std::endl;
+#endif
+            } else { //if none, use max
+                cur_item.code = 5;
+                cur_item.d_l = ft.odist1[il_found];
+                cur_item.d_r = ft.odist2[ir_found];
+                cur_item.step_l = il_found;
+                cur_item.step_r = ir_found;
+                cur_item.frame = il_found<ir_found? il_found : ir_found;                                    
+                cur_section.items.push_back(cur_item);
+                cur_section.takeoff_frame = il_found<ir_found? il_found : ir_found;
+#ifdef SHOW_DEBUG_TEXT
+                std::cout << "\tTake-off: None found" << std::endl;
+#endif
+            }
+#ifdef SHOW_DEBUG_TEXT
+            std::cout << "\tTake-off: " << cur_item.frame << std::endl;
+            std::cout << "\tTake-off - left?: " << cur_item.step_l << std::endl;
+#endif
+        //end if step_out_detected
+        } else { 
+#ifdef SHOW_DEBUG_TEXT
+            std::cout << "\tNo step out found. " << std::endl;
+#endif
+
+            break; //No step out, means irrelevant rest of video
+        }
+        
+        //Search for arrival info
+        int last_arrival_frame = -1; //Value is -1 if no one steps, and the corresponding frame if it steps
+        int nearest_arrival_code; //Stepping or not, it is the nearest arrival code
+        int last_real = -1;
+        float nearest_arrival_distance = FLT_MAX;
+        bool still_near_center_l = true, still_near_center_r = true, real_arrival = false, is_left = true;
+        for (int i = current_center_exit1<current_center_exit2?current_center_exit1:current_center_exit2; i < maxFrame; ++i) {
+#ifdef SHOW_DEBUG_TEXT
+            std::cout << "\tArrival - frame: " << i << std::endl;
+#endif            
+            //There might still be one of the feet near center
+            if(ft.in_objective1[i] != 5) {
+#ifdef SHOW_DEBUG_TEXT
+                std::cout << "\tArrival - check left far center... " << std::endl;
+#endif            
+                still_near_center_l = false;
+                if(ft.left_step[i] == 1) { 
+#ifdef SHOW_DEBUG_TEXT
+                    std::cout << "\tArrival - check left far center step - code: " << ft.in_objective1[i] << std::endl;
+                    std::cout << "\tArrival - check left far center step - distance: " << ft.odist1[i] << std::endl;
+                    std::cout << "\tArrival - check left far center step - last_real: " << last_real << std::endl;
+#endif            
+                    if(ft.odist1[i]==0 && last_real != ft.in_objective1[i]) { //Registers the first arrival with this code
+                        last_arrival_frame = i;
+                        last_real = nearest_arrival_code = ft.in_objective1[i];
+                        nearest_arrival_distance = 0;
+                        real_arrival = true;
+                        is_left = true;
+#ifdef SHOW_DEBUG_TEXT
+                std::cout << "\tArrival - left real arrival found at: " << i << std::endl;
+#endif            
+                    } 
+                    if(!real_arrival && ft.odist1[i] < nearest_arrival_distance) {
+                        nearest_arrival_distance = ft.odist1[i];
+                        last_arrival_frame = i;
+                        nearest_arrival_code = ft.in_objective1[i];
+                        is_left = true;
+#ifdef SHOW_DEBUG_TEXT
+                std::cout << "\tArrival - left near arrival found at: " << i << std::endl;
+                std::cout << "\tArrival - left near arrival - nearest arrival distance: " << nearest_arrival_distance << std::endl;
+#endif            
+                    }
+                }
+            }
+            if(ft.in_objective2[i] != 5) {
+#ifdef SHOW_DEBUG_TEXT
+                std::cout << "\tArrival - check right far center... " << std::endl;
+#endif            
+                still_near_center_r = false;
+                if(ft.right_step[i] == 1) { 
+#ifdef SHOW_DEBUG_TEXT
+                    std::cout << "\tArrival - check right far center step - code: " << ft.in_objective2[i] << std::endl;
+                    std::cout << "\tArrival - check right far center step - distance: " << ft.odist2[i] << std::endl;
+                    std::cout << "\tArrival - check right far center step - last_real: " << last_real << std::endl;
+#endif            
+                    if(ft.odist2[i]==0 && last_real != ft.in_objective2[i]) { //Registers the first arrival with this code
+                        last_arrival_frame = i;
+                        last_real = nearest_arrival_code = ft.in_objective2[i];
+                        nearest_arrival_distance = 0;
+                        real_arrival = true;
+                        is_left = false;
+#ifdef SHOW_DEBUG_TEXT
+                        std::cout << "\tArrival - right real arrival found at: " << i << std::endl;
+#endif            
+                    } 
+                    if(!real_arrival && ft.odist2[i] < nearest_arrival_distance) {
+                        nearest_arrival_distance = ft.odist2[i];
+                        last_arrival_frame = i;
+                        nearest_arrival_code = ft.in_objective2[i];
+                        is_left = false;
+#ifdef SHOW_DEBUG_TEXT
+                        std::cout << "\tArrival - right near arrival found at: " << i << std::endl;
+                        std::cout << "\tArrival - right near arrival - nearest arrival distance: " << nearest_arrival_distance << std::endl;
+#endif            
+                    }
+                }
+
+            }
+            
+            if(!still_near_center_l && ft.in_objective1[i] == 5 && ft.left_step[i] == 1) { //First step returning to center
+#ifdef SHOW_DEBUG_TEXT
+                std::cout << "\tArrival - left step returning to center found at: " << i << std::endl;
+#endif            
+
+                next_seq = i;
+                break;
+            }
+            if(!still_near_center_r && ft.in_objective2[i] == 5 && ft.right_step[i] == 1) { //First step returning to center
+#ifdef SHOW_DEBUG_TEXT
+                std::cout << "\tArrival - right step returning to center found at: " << i << std::endl;
+#endif            
+                next_seq = i;
+                break;
+            }
+            
+        } 
+        
+        //Set arrival errors and arrival time
+        if(!real_arrival || nearest_arrival_code != cur_objective) {
+            if(real_arrival && nearest_arrival_code != cur_objective)
+                right_objective = false;
+            if(!real_arrival)
+                step_objective = false; 
+        }
+        cur_item.code = nearest_arrival_code;
+        cur_item.d_l = ft.odist1[last_arrival_frame];
+        cur_item.d_r = ft.odist2[last_arrival_frame];
+        cur_item.step_l = is_left? 1:0;
+        cur_item.step_r = is_left? 0:1;
+        cur_item.frame = last_arrival_frame;
+        cur_section.items.push_back(cur_item);
+        cur_section.arrival_frame = last_arrival_frame;
+        cur_section.arrival_code = nearest_arrival_code;
+
+#ifdef SHOW_DEBUG_TEXT
+        std::cout << "\tArrival - arrival frame: " << cur_section.arrival_frame << std::endl;
+        std::cout << "\tArrival - arrival code: " << cur_section.arrival_code << std::endl;
+        if(is_left)
+            std::cout << "\tArrival - arrival distance: " << ft.odist1[last_arrival_frame] << std::endl;
+        else
+            std::cout << "\tArrival - arrival distance: " << ft.odist2[last_arrival_frame] << std::endl;
+#endif            
+
+        
+        //Check if steps in center on return
+        bool still_far_center_l = true, still_far_center_r = true, ready_l = false, ready_r = false;
+        step_center = false;
+        for (int i = next_seq; i < maxFrame; ++i) {
+#ifdef SHOW_DEBUG_TEXT
+            std::cout << "\tReturn to center - frame: " << i << std::endl;
+#endif            
+            //There might still be one of the feet near center
+            if(ft.in_objective1[i] == 5) {
+                still_far_center_l = false;
+                if(ft.left_step[i] == 1) {
+#ifdef SHOW_DEBUG_TEXT
+            std::cout << "\tReturn to center - found left at: " << i << std::endl;
+#endif            
+                    step_center = true;                    
+                    break;
+                }
+            }
+            if(ft.in_objective2[i] == 5) {
+                still_far_center_r = false;
+                if(ft.right_step[i] == 1) {
+#ifdef SHOW_DEBUG_TEXT
+                    std::cout << "\tReturn to center - found right at: " << i << std::endl;
+#endif            
+                    step_center = true;
+                    break;
+                }
+            }
+            
+            if(!still_far_center_l && ft.in_objective1[i] != 5)
+                ready_l = true;
+                
+            if(!still_far_center_r && ft.in_objective2[i] != 5)
+                ready_r = true;
+            
+            if(ready_l && ready_r) {
+#ifdef SHOW_DEBUG_TEXT
+            std::cout << "\tReturn to center - both ready at: " << i << std::endl;
+#endif            
+                break;
+            }
+        } 
+        
+        //Set error and store in sequences
+        cur_section.error = (right_objective && step_objective && step_center) ? false : true;
+#ifdef SHOW_DEBUG_TEXT
+        std::cout << "\tFinal stimulus error: " << cur_section.error << std::endl;
+#endif            
+
+        sequences.push_back(cur_section);
+        
+        //Set next beggining to next sequence of centers
+        current_seq = next_seq;
+        first_stimulus = false;
+    } //end stimuli sequence
+    
+    return toJSON(sequences);
+}
+
+
+// Per frame: Two feet. By foot: (x y w h code xp yp d)
+//  (x,y,w,h): foot rect                (left_step, right_step)
+//  code:                               (in_objective1, in_objective2)
+//      0: No step
+//    1-9: Step to nearest objective
+//  (xp,yp): Feet contact point         (left_foot, right_foot)
+//  d: distance to nearest center       (odist1, odist2)
+std::string ComputerVisionWeb::buildFinalOutputImproved(FeetTracker &ft, std::vector<MarkAndTime> sequence, int maxFrame) {
+    //in_objective1, in_objective2
+    //odist1, odist2
+    
+    for (int i = 0; i <= maxFrame; ++i) {
+        std::cout << "Frame: " << i << "\n\tLeft: " << ft.in_objective1[i] << "\n\tRight: " << ft.in_objective2[i] << std::endl;
+        
+    }
+    
+    //Get central stimulus central position
+    cv::Point2f pcentral = ft.contourCentersScene[4];
+    
+    
+    const int relevant_change = 40; //Number of centimeters for considering relevant change in position
+    
+    int current_seq = 0, //index for starting current sequence
+        current_center_exit = 0, //index for exiting center on current sequence
+        next_seq = 0;  //index for starting next sequence
+    cv::Point p_out;
+    
+    //Variables for stimuli sequence:
+    uint n_objectives = sequence.size();
+    int i, cur_objective, cur_frame;
+
+    //Divide items in stimuli sequence data and calculate frames de despegue y llegada
+    // Lista para almacenar los resultados
+    std::vector<Section> sequences;
+    
+    //Get intervals per objective:
+    for (int j = 0; j < n_objectives; ++j) {
+        Section cur_section;
+        item cur_item;
+        
+        cur_objective = sequence[j].mark_correct; 
+        cur_frame = sequence[j].frame;
+
+#ifdef SHOW_DEBUG_TEXT
+        std::cout << "Marking.\n\tCurrent stimuli: " << j << std::endl;
+        std::cout << "\tCurrent stimuli objective: " << cur_objective << std::endl;
+        std::cout << "\tCurrent stimuli frame: " << cur_frame << std::endl;
+#endif        
+        //Booleans for marking errors (assume right first):
+        bool step_center = true, step_objective = true, right_objective = true; 
+        
+        //Advance until both are near the 5 zone (assume that the player can be late):
+        for (i = current_seq; i <= maxFrame; ++i)
+            if(ft.in_objective1[i] == 5 || ft.in_objective2[i] == 5)
+                break;
+#ifdef SHOW_DEBUG_TEXT
+        std::cout << "\tCurrent sequence start - prev cur_frame: " << current_seq << std::endl;
+#endif        
+        
+        //Update start of current seq: if stimulus presentation is higher than presence in zone 5, start from stimulus presentation frame
+        current_seq = (cur_frame >= i)? cur_frame : i;
+
+#ifdef SHOW_DEBUG_TEXT
+        std::cout << "\tCurrent sequence start - after cur_frame: " << current_seq << std::endl;
+#endif        
+
+        
+        //Search for center position exit, considered as the first step out of center zone:
+        bool step_out_detected = false, out_left;
+        for (i = current_seq; i <= maxFrame; ++i) {
+            if(ft.left_step[i] == 0 && ft.right_step[i] == 0) //Continue until a step is detected
+                continue;
+#ifdef SHOW_DEBUG_TEXT
+        std::cout << "\tCurrent frame - search position exit: " << i << std::endl;
+#endif        
+            //Left foot steps out:
+            if(!step_out_detected && ft.left_step[i] == 1 && ft.in_objective1[i] != 5) {
+#ifdef SHOW_DEBUG_TEXT
+        std::cout << "\tExit frame left - position exit: " << i << std::endl;
+        std::cout << "\tExit frame left - code found: " << ft.in_objective1[i] << std::endl;
+#endif        
+                current_center_exit = i;
+                step_out_detected = true;
+            }
+            //Right foot steps out:
+            if(!step_out_detected && ft.right_step[i] == 1 && ft.in_objective2[i] != 5) {
+#ifdef SHOW_DEBUG_TEXT
+        std::cout << "\tExit frame right - position exit: " << i << std::endl;
+        std::cout << "\tExit frame right - code found: " << ft.in_objective2[i] << std::endl;
+#endif        
+                current_center_exit = i;
+                step_out_detected = true;
+            }
+            
+            //Get a coherent position to compare by ensuring that both feet are near the same zone and take one of them as step:
+            if(ft.in_objective1[i] != 5 && ft.in_objective2[i] == ft.in_objective1[i]) {
+            //Left foot steps out:
+                if(ft.left_step[i] == 1) {
+#ifdef SHOW_DEBUG_TEXT
+                    std::cout << "\tExit frame left - sure position at: " << i << std::endl;
+                    std::cout << "\tExit frame left - sure position code found: " << ft.in_objective1[i] << std::endl;
+                    std::cout << "\tExit frame left - sure position: " << ft.left_foot[i].x << ", " << ft.left_foot[i].y << std::endl;
+#endif        
+                    p_out = ft.left_foot[i];
+                    out_left = true;
+                    break;
+                }
+                //Right foot steps out:
+                if(ft.right_step[i] == 1) {
+#ifdef SHOW_DEBUG_TEXT
+                    std::cout << "\tExit frame right - sure position: " << i << std::endl;
+                    std::cout << "\tExit frame right - sure position code found: " << ft.in_objective2[i] << std::endl;
+                    std::cout << "\tExit frame right - sure position: " << ft.right_foot[i].x << ", " << ft.right_foot[i].y << std::endl;
+#endif        
+                    p_out = ft.right_foot[i];
+                    out_left = false;
+                    break;
+                }
+            }
+        }
+        
+        if(step_out_detected) { //It shall be detected... if not maybe end of stimuli sequence or player skip some stimuli
+            //Check which is the first leg going on the objective direction
+            int lindex_1, lindex_2, rindex_1, rindex_2;
+            bool stepping = false, first = true, pl_found = false, pr_found = false;
+            cv::Point2f p1, p2;
+            float d1, d2, dc1, dc2, d, d_max = 0;
+            int max_index = current_seq + 1;
+            bool max_is_left = true;
+            
+            //Check first relevant change in left step
+            for (i = current_seq; i <= current_center_exit; ++i) {
+#ifdef SHOW_DEBUG_TEXT
+                std::cout << "\tTake-off - left - frame: " << i << std::endl;
+#endif                        
+                if(first) { //Search for end of first stepping
+                    if(ft.left_step[i] == 1) { //A step
+#ifdef SHOW_DEBUG_TEXT
+                std::cout << "\tTake-off - left - start stepping... " << std::endl;
+#endif                        
+                        stepping = true;
+                    } else if(stepping && ft.left_step[i] == 0) { //Is stepping, so check if it stops doing so
+#ifdef SHOW_DEBUG_TEXT
+                        std::cout << "\tTake-off - left - stop stepping... " << std::endl;
+#endif                        
+                        lindex_1 = i-1;
+                        stepping = false;
+                        first = false; //First index ready
+                    }
+                } else { //Search for first of following step
+                    if(ft.left_step[i] == 1) { //First position of next step
+                        lindex_2 = i;
+                        cv::Point2f p_out_s;
+                        //Significant displacement criterion
+                        p1 = ft.imageToScene(ft.left_foot[lindex_1]);
+                        p2 = ft.imageToScene(ft.left_foot[lindex_2]);
+                        p_out_s = ft.imageToScene(p_out);
+                        d1 = sqrt((p_out_s.x - p1.x)*(p_out_s.x - p1.x) + (p_out_s.y - p1.y)*(p_out_s.y - p1.y));//L2 norm
+                        d2 = sqrt((p_out_s.x - p2.x)*(p_out_s.x - p2.x) + (p_out_s.y - p2.y)*(p_out_s.y - p2.y));//L2 norm
+                        dc1 = sqrt((pcentral.x - p1.x)*(pcentral.x - p1.x) + (pcentral.y - p1.y)*(pcentral.y - p1.y));//L2 norm
+                        dc2 = sqrt((pcentral.x - p2.x)*(pcentral.x - p2.x) + (pcentral.y - p2.y)*(pcentral.y - p2.y));//L2 norm
+                        d  = sqrt((p2.x - p1.x)*(p2.x - p1.x) + (p2.y - p1.y)*(p2.y - p1.y));
+                        
+#ifdef SHOW_DEBUG_TEXT
+                        std::cout << "\tTake-off - Two left found - first index: " << lindex_1 << std::endl;
+                        std::cout << "\tTake-off - Two left found - second index: " << lindex_2 << std::endl;
+                        std::cout << "\tTake-off - Two left found - d1: " << d1 << std::endl;
+                        std::cout << "\tTake-off - Two left found - d2: " << d2 << std::endl;
+                        std::cout << "\tTake-off - Two left found - d_relevant: " << d << std::endl;
+#endif        
+
+                        
+                        if(d >= relevant_change && d2 < d1 && dc1 < dc2) { //It approaches to center exit and goes far from center
+#ifdef SHOW_DEBUG_TEXT
+                            std::cout << "\tTake-off - Two left found - left found. " << std::endl;
+#endif
+                            //lindex_1+1 will be the take-off frame if left index < right index
+                            pl_found = true;
+                            break;
+                        } else { //Non-significant step or step in wrong direction, keep searching
+                            if(d2 < d1 && dc1 < dc2) { //Store it in case no one accomplish the strong criterion
+                                if(d > d_max) { 
+                                    d_max = d;
+                                    max_index = lindex_1;
+                                    max_is_left = true;
+                                }
+                            }
+                            
+                            stepping = true;                            
+                            first = true; //Consider as first again
+                            lindex_1 = lindex_2;
+                        }
+                    }                        
+                }
+            }
+
+            
+            //Now check first relevant change in right step
+            stepping = false; 
+            first = true;
+            for (i = current_seq; i <= current_center_exit; ++i) {
+                if(first) { //Search for end of first stepping
+                    if(ft.right_step[i] == 1) { //A step
+#ifdef SHOW_DEBUG_TEXT
+                        std::cout << "\tTake-off - right - start stepping... " << std::endl;
+#endif                        
+                        stepping = true;
+                    } else if(stepping && ft.right_step[i] == 0) { //Is stepping, so check if it stops doing so
+#ifdef SHOW_DEBUG_TEXT
+                        std::cout << "\tTake-off - right - stop stepping... " << std::endl;
+#endif                        
+                        rindex_1 = i-1;
+                        stepping = false;
+                        first = false; //First index ready
+                    }
+                } else { //Search for first of following step
+                    if(ft.right_step[i] == 1) { //First position of next step
+                        rindex_2 = i;
+                        cv::Point2f p_out_s;
+                        //Significant displacement criterion
+                        p1 = ft.imageToScene(ft.right_foot[rindex_1]);
+                        p2 = ft.imageToScene(ft.right_foot[rindex_2]);
+                        p_out_s = ft.imageToScene(p_out);
+                        d1 = sqrt((p_out_s.x - p1.x)*(p_out_s.x - p1.x) + (p_out_s.y - p1.y)*(p_out_s.y - p1.y));//L2 norm
+                        d2 = sqrt((p_out_s.x - p2.x)*(p_out_s.x - p2.x) + (p_out_s.y - p2.y)*(p_out_s.y - p2.y));//L2 norm
+                        dc1 = sqrt((pcentral.x - p1.x)*(pcentral.x - p1.x) + (pcentral.y - p1.y)*(pcentral.y - p1.y));//L2 norm
+                        dc2 = sqrt((pcentral.x - p2.x)*(pcentral.x - p2.x) + (pcentral.y - p2.y)*(pcentral.y - p2.y));//L2 norm
+                        d  = sqrt((p2.x - p1.x)*(p2.x - p1.x) + (p2.y - p1.y)*(p2.y - p1.y));
+#ifdef SHOW_DEBUG_TEXT
+                        std::cout << "\tTake-off - Two right found - first index: " << rindex_1 << std::endl;
+                        std::cout << "\tTake-off - Two right found - second index: " << rindex_2 << std::endl;
+                        std::cout << "\tTake-off - Two right found - d1: " << d1 << std::endl;
+                        std::cout << "\tTake-off - Two right found - d2: " << d2 << std::endl;
+                        std::cout << "\tTake-off - Two right found - d_relevant: " << d << std::endl;
+#endif        
+
+                        if(d >= relevant_change && d2 < d1 && dc1 < dc2) { //It approaches to center exit 
+#ifdef SHOW_DEBUG_TEXT
+                            std::cout << "\tTake-off - Two right found - right found. " << std::endl;
+#endif
+                            //rindex_1 will be the take-off frame if left index > right index
+                            pr_found = true;
+                            break;
+                        } else { //Non-significant step or step in wrong direction, keep searching
+                            if(d2 < d1 && dc1 < dc2) { //Store it in case no one accomplish the strong criterion
+                                if(d > d_max) { 
+                                    d_max = d;
+                                    max_index = rindex_1;
+                                    max_is_left = false;
+                                }
+                            }
+                            stepping = true;                            
+                            first = true; //Consider as first again
+                            rindex_1 = rindex_2;
+                        }
+                    }                        
+                }
+            }   
+
+            //Set take-off frame:
+            if(pl_found && pr_found) {
+                if(lindex_1 < rindex_1) { //Take-off is from left
+                    cur_item.code = 5;
+                    cur_item.d_l = ft.odist1[lindex_1];
+                    cur_item.d_r = ft.odist2[rindex_1];
+                    cur_item.step_l = true;
+                    cur_item.step_r = false;
+                    cur_item.frame = lindex_1+1;
+                    cur_section.items.push_back(cur_item);
+                    cur_section.takeoff_frame = lindex_1+1;
+                } else {
+                    cur_item.code = 5;
+                    cur_item.d_l = ft.odist1[lindex_1];
+                    cur_item.d_r = ft.odist2[rindex_1];
+                    cur_item.step_l = false;
+                    cur_item.step_r = true;
+                    cur_item.frame = rindex_1+1;                    
+                    cur_section.items.push_back(cur_item);
+                    cur_section.takeoff_frame = rindex_1+1;
+                }
+            } else if(pl_found) {
+                cur_item.code = 5;
+                cur_item.d_l = ft.odist1[lindex_1];
+                cur_item.d_r = ft.odist2[rindex_1];
+                cur_item.step_l = true;
+                cur_item.step_r = false;
+                cur_item.frame = lindex_1+1;
+                cur_section.items.push_back(cur_item);
+                cur_section.takeoff_frame = lindex_1+1;
+
+            } else if (pr_found) {
+                cur_item.code = 5;
+                cur_item.d_l = ft.odist1[lindex_1];
+                cur_item.d_r = ft.odist2[rindex_1];
+                cur_item.step_l = false;
+                cur_item.step_r = true;
+                cur_item.frame = rindex_1+1;                                    
+                cur_section.items.push_back(cur_item);
+                cur_section.takeoff_frame = rindex_1+1;
+            } else { //if none, use max
+                cur_item.code = 5;
+                cur_item.d_l = ft.odist1[max_index];
+                cur_item.d_r = ft.odist2[max_index];
+                cur_item.step_l = max_is_left;
+                cur_item.step_r = !max_is_left;
+                cur_item.frame = max_index+1;                                    
+                cur_section.items.push_back(cur_item);
+                cur_section.takeoff_frame = max_index+1;
+            }
+#ifdef SHOW_DEBUG_TEXT
+                            std::cout << "\tTake-off: " << cur_item.frame << std::endl;
+                            std::cout << "\tTake-off - left?: " << cur_item.step_l << std::endl;
+#endif
+        //end if step_out_detected
+        } else { 
+            break; //No step out, means irrelevant rest of video
+        }
+        
+        //Search for arrival info
+        int last_arrival_frame = -1; //Value is -1 if no one steps, and the corresponding frame if it steps
+        int nearest_arrival_code; //Stepping or not, it is the nearest arrival code
+        int last_real = -1;
+        float nearest_arrival_distance = FLT_MAX;
+        bool still_near_center_l = true, still_near_center_r = true, real_arrival = false, is_left = true;
+        for (int i = current_center_exit; i <= maxFrame; ++i) {
+#ifdef SHOW_DEBUG_TEXT
+            std::cout << "\tArrival - frame: " << i << std::endl;
+#endif            
+            //There might still be one of the feet near center
+            if(ft.in_objective1[i] != 5) {
+#ifdef SHOW_DEBUG_TEXT
+                std::cout << "\tArrival - check left far center... " << std::endl;
+#endif            
+                still_near_center_l = false;
+                if(ft.left_step[i] == 1) { 
+#ifdef SHOW_DEBUG_TEXT
+                    std::cout << "\tArrival - check left far center step - code: " << ft.in_objective1[i] << std::endl;
+                    std::cout << "\tArrival - check left far center step - distance: " << ft.odist1[i] << std::endl;
+                    std::cout << "\tArrival - check left far center step - last_real: " << last_real << std::endl;
+#endif            
+                    if(ft.odist1[i]==0 && last_real != ft.in_objective1[i]) { //Registers the first arrival with this code
+                        last_arrival_frame = i;
+                        last_real = nearest_arrival_code = ft.in_objective1[i];
+                        nearest_arrival_distance = 0;
+                        real_arrival = true;
+                        is_left = true;
+#ifdef SHOW_DEBUG_TEXT
+                std::cout << "\tArrival - left real arrival found at: " << i << std::endl;
+#endif            
+                    } 
+                    if(!real_arrival && ft.odist1[i] < nearest_arrival_distance) {
+                        nearest_arrival_distance = ft.odist1[i];
+                        last_arrival_frame = i;
+                        nearest_arrival_code = ft.in_objective1[i];
+                        is_left = true;
+#ifdef SHOW_DEBUG_TEXT
+                std::cout << "\tArrival - left near arrival found at: " << i << std::endl;
+                std::cout << "\tArrival - left near arrival - nearest arrival distance: " << nearest_arrival_distance << std::endl;
+#endif            
+                    }
+                }
+            }
+            if(ft.in_objective2[i] != 5) {
+#ifdef SHOW_DEBUG_TEXT
+                std::cout << "\tArrival - check right far center... " << std::endl;
+#endif            
+                still_near_center_r = false;
+                if(ft.right_step[i] == 1) { 
+#ifdef SHOW_DEBUG_TEXT
+                    std::cout << "\tArrival - check right far center step - code: " << ft.in_objective2[i] << std::endl;
+                    std::cout << "\tArrival - check right far center step - distance: " << ft.odist2[i] << std::endl;
+                    std::cout << "\tArrival - check right far center step - last_real: " << last_real << std::endl;
+#endif            
+                    if(ft.odist2[i]==0 && last_real != ft.in_objective2[i]) { //Registers the first arrival with this code
+                        last_arrival_frame = i;
+                        last_real = nearest_arrival_code = ft.in_objective2[i];
+                        nearest_arrival_distance = 0;
+                        real_arrival = true;
+                        is_left = false;
+#ifdef SHOW_DEBUG_TEXT
+                        std::cout << "\tArrival - right real arrival found at: " << i << std::endl;
+#endif            
+                    } 
+                    if(!real_arrival && ft.odist2[i] < nearest_arrival_distance) {
+                        nearest_arrival_distance = ft.odist2[i];
+                        last_arrival_frame = i;
+                        nearest_arrival_code = ft.in_objective2[i];
+                        is_left = false;
+#ifdef SHOW_DEBUG_TEXT
+                        std::cout << "\tArrival - right near arrival found at: " << i << std::endl;
+                        std::cout << "\tArrival - right near arrival - nearest arrival distance: " << nearest_arrival_distance << std::endl;
+#endif            
+                    }
+                }
+
+            }
+            
+            if(!still_near_center_l && ft.in_objective1[i] == 5 && ft.left_step[i] == 1) { //First step returning to center
+#ifdef SHOW_DEBUG_TEXT
+                std::cout << "\tArrival - left step returning to center found at: " << i << std::endl;
+#endif            
+
+                next_seq = i;
+                break;
+            }
+            if(!still_near_center_r && ft.in_objective2[i] == 5 && ft.right_step[i] == 1) { //First step returning to center
+#ifdef SHOW_DEBUG_TEXT
+                std::cout << "\tArrival - right step returning to center found at: " << i << std::endl;
+#endif            
+                next_seq = i;
+                break;
+            }
+            
+        } 
+        
+        //Set arrival errors and arrival time
+        if(!real_arrival || nearest_arrival_code != cur_objective) {
+            if(real_arrival && nearest_arrival_code != cur_objective)
+                right_objective = false;
+            if(!real_arrival)
+                step_objective = false; 
+        }
+        cur_item.code = nearest_arrival_code;
+        cur_item.d_l = ft.odist1[last_arrival_frame];
+        cur_item.d_r = ft.odist2[last_arrival_frame];
+        cur_item.step_l = is_left? 1:0;
+        cur_item.step_r = is_left? 0:1;
+        cur_item.frame = last_arrival_frame;
+        cur_section.items.push_back(cur_item);
+        cur_section.arrival_frame = last_arrival_frame;
+        cur_section.arrival_code = nearest_arrival_code;
+
+#ifdef SHOW_DEBUG_TEXT
+        std::cout << "\tArrival - arrival frame: " << cur_section.arrival_frame << std::endl;
+        std::cout << "\tArrival - arrival code: " << cur_section.arrival_code << std::endl;
+        if(is_left)
+            std::cout << "\tArrival - arrival distance: " << ft.odist1[last_arrival_frame] << std::endl;
+        else
+            std::cout << "\tArrival - arrival distance: " << ft.odist2[last_arrival_frame] << std::endl;
+#endif            
+
+        
+        //Check if steps in center on return
+        bool still_far_center_l = true, still_far_center_r = true, ready_l = false, ready_r = false;
+        step_center = false;
+        for (int i = next_seq; i <= maxFrame; ++i) {
+#ifdef SHOW_DEBUG_TEXT
+            std::cout << "\tReturn to center - frame: " << i << std::endl;
+#endif            
+            //There might still be one of the feet near center
+            if(ft.in_objective1[i] == 5) {
+                still_far_center_l = false;
+                if(ft.left_step[i] == 1) {
+#ifdef SHOW_DEBUG_TEXT
+            std::cout << "\tReturn to center - found left at: " << i << std::endl;
+#endif            
+                    step_center = true;                    
+                    break;
+                }
+            }
+            if(ft.in_objective2[i] == 5) {
+                still_far_center_r = false;
+                if(ft.right_step[i] == 1) {
+#ifdef SHOW_DEBUG_TEXT
+                    std::cout << "\tReturn to center - found right at: " << i << std::endl;
+#endif            
+                    step_center = true;
+                    break;
+                }
+            }
+            
+            if(!still_far_center_l && ft.in_objective1[i] != 5)
+                ready_l = true;
+                
+            if(!still_far_center_r && ft.in_objective2[i] != 5)
+                ready_r = true;
+            
+            if(ready_l && ready_r) {
+#ifdef SHOW_DEBUG_TEXT
+            std::cout << "\tReturn to center - both ready at: " << i << std::endl;
+#endif            
+                break;
+            }
+        } 
+        
+        //Set error and store in sequences
+        cur_section.error = (right_objective && step_objective && step_center) ? false : true;
+#ifdef SHOW_DEBUG_TEXT
+        std::cout << "\tFinal stimulus error: " << cur_section.error << std::endl;
+#endif            
+
+        sequences.push_back(cur_section);
+        
+        //Set next beggining to next sequence of centers
+        current_seq = next_seq;
+        
+    } //end stimuli sequence
+    
+    return toJSON(sequences);
+}
+
+cv::Mat recalibrateHomography(std::vector<cv::Point2f> &contourCenters) {
+    std::vector<cv::Point2f> scenePoints;
+    //The nine scene points
+    scenePoints.resize(9);
+    cv::Point2f p;
+    p.x = 141.421356237; p.y = 141.421356237;
+    scenePoints[0] = p; //Position 1
+    p.x =    0; p.y = 200;
+    scenePoints[1] = p; //Position 2
+    p.x =  -141.421356237; p.y = 141.421356237;
+    scenePoints[2] = p; //Position 3
+    p.x = 200; p.y = 0;
+    scenePoints[3] = p; //Position 4
+    p.x =    0; p.y = 0;
+    scenePoints[4] = p; //Position 5
+    p.x =  -200; p.y = 0;
+    scenePoints[5] = p; //Position 6
+    p.x = 141.421356237; p.y = -141.421356237;
+    scenePoints[6] = p; //Position 7
+    p.x =    0; p.y = -200;
+    scenePoints[7] = p; //Position 8
+    p.x =  -141.421356237; p.y = -141.421356237;
+    scenePoints[8] = p; //Position 9
+    
+    //Using same parameters as in calibration phase:
+    return cv::findHomography(contourCenters, scenePoints, cv::RANSAC, 5);
+}
+
+
+        
+
+std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string videoUrl, std::string imageUrl, std::string jsonString) {
     // String contornos se debe pasar a std::vector<Contour>
     std::istringstream iss(contourjson);
 
@@ -673,23 +1868,6 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
 
     std::string string_calib_w = std::to_string(root["response"]["calib_w"].asInt());
     std::string string_calib_h = std::to_string(root["response"]["calib_h"].asInt());
-    std::string H_string = root["response"]["H_string"].asString();
-
-    H_string.erase(remove(H_string.begin(), H_string.end(), '['), H_string.end());
-    H_string.erase(remove(H_string.begin(), H_string.end(), ']'), H_string.end());
-
-    std::vector<double> H_values;
-    std::stringstream ss(H_string);
-    std::string item;
-
-    while (getline(ss, item, ',')) {
-        H_values.push_back(std::stod(item));
-    }
-
-    // Imprime los valores de la homografia
-    // for (double val : H_values) {
-    //     std::cout << val << std::endl;
-    // }
     
     std::vector<Contour> contornos;
 
@@ -721,13 +1899,15 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
     int calib_w = std::stoi(string_calib_w);
     int calib_h = std::stoi(string_calib_h);
 
+
     cv::VideoCapture vtest;
     vtest.open(urlVideo);
 
-    float frame_rate = 0.0f;
+    int frame_rate = 0;
     if (vtest.isOpened())
     {
-        frame_rate = std::stof(frameRate);
+        frame_rate = vtest.get(cv::CAP_PROP_FPS);
+        std::cout << frame_rate << std::endl;
     }
     else
     {
@@ -772,8 +1952,10 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
 
     // Train MoG
     bool first = true;
-    uint msec_per_frame = static_cast<uint>(std::round(1000.0 / frame_rate));
-    uint frame = 0, maxFrame, time = 0, initial_msec = 0, final_msec = INT_MAX;
+    uint frame = 0, maxFrame, time = 0, msec_per_frame = 1000 / frame_rate,
+        initial_msec = 0, // final_msec = 10000;
+        // initial_msec = 0,
+        final_msec = INT_MAX;
     cv::Mat fg;
 #ifdef SHOW_INTERMEDIATE_RESULTS
     std::cout << "MoG Training.\n\tInit time: " << initial_msec << std::endl;
@@ -803,6 +1985,7 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
 #endif
     }
 
+    learningRate = 0.01;
     std::map<int, int> msecs;
     while (1)
     {
@@ -841,7 +2024,6 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
             // We need to scale de points of each contour
             float scaleX = static_cast<float>(real_w) / static_cast<float>(calib_w);
             float scaleY = static_cast<float>(real_h) / static_cast<float>(calib_h);
-
             for (auto &contorno : contornos)
             {
                 for (auto &punto : contorno.points)
@@ -910,6 +2092,47 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
     ft.calib_w = calib_w;
     ft.calib_h = calib_h;
 
+    
+    std::vector<cv::Point2f> contourCenters;
+    float xx,yy;
+    int n;
+  
+    //Get contour centers:
+    for (const auto &c : contornos) {
+        xx = yy = 0;
+        n = 0;
+        for (const auto &p : c.points) {
+            xx += p.x;
+            yy += p.y;
+            ++n;
+        }
+        contourCenters.push_back(cv::Point2f(xx/n, yy/n));
+    }
+    ft.contourCenters = contourCenters;
+
+    //Recalculate homography image --> scene with contour centers
+    ft.H = recalibrateHomography(contourCenters);
+
+    //Get proyected contours:
+    for (const auto &c : contornos) {
+        Contour contorno;
+        contorno.indiceContorno = c.indiceContorno;
+        contorno.x = c.x;
+        contorno.y = c.y;
+        contorno.z = c.z;
+        for (const auto &p : c.points) 
+            contorno.points.push_back(ft.imageToScene(p));
+        ft.contoursScene.push_back(contorno); 
+    }
+    
+    
+    std::cout << "Recalibration: " << std::endl;
+    for(int i=0; i<contourCenters.size(); ++i) {
+        cv::Point2f p = ft.imageToScene(contourCenters[i]);
+        std::cout << "\tObjective " << i+1 << ": " << p.x << ", " << p.y << std::endl; 
+        ft.contourCentersScene.push_back(p);
+    }
+
     // Adjust tracking and get steps
     ft.left_foot.resize(maxFrame);
     ft.right_foot.resize(maxFrame);
@@ -960,6 +2183,9 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
     std::cerr << "End calibration init...\n\nStart step processing..." << std::endl;
 #endif
 
+    uint j_cur = 0, n_objectives = sequence.size();
+    int cur_objective = sequence[0].mark_correct;
+
     for (uint i = 1; i <= maxFrame; ++i)
     {
         frame = frame_it->first;
@@ -978,6 +2204,23 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
         // cv::resize(cur_copy, cur_copy, cv::Size(3*current.cols,3*current.rows));
         cv::imshow("Current Image", cur_copy);
 #endif
+        //Get currently active objective
+        for (uint j = j_cur; j < n_objectives; ++j) {
+            MarkAndTime &m = sequence[j];
+            uint oframe = m.frame;
+//            std::cout << "Frame: " << frame << "; OFrame: " << oframe << std::endl;
+            if(frame < oframe) 
+                break;
+            int cobjective = m.mark_correct;
+            cur_objective = cobjective;
+            j_cur = j;
+        
+        }
+        
+#ifdef SHOW_INTERMEDIATE_RESULTS
+        std::cout << "Current Objective: " << cur_objective << std::endl;
+#endif        
+        
         cv::Mat rr;
         result = presegmentation(mog, current, slabels, rr);
         if (!result.empty())
@@ -1070,15 +2313,15 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
     int pos_correction = FeetTracker::frames_to_store / 2 + 1;
     for (uint i = maxFrame - pos_correction; i <= maxFrame; ++i)
     {
-        ft.processStepsWithCoverageArea(i - 1, i, ft.sframes[i]);
+        ft.processStepsWithCoverageArea(i - 1, i, ft.sframes[i], cur_objective);
+        // ft.processStepsWithDistanceToCenter(i - 1, i, ft.sframes[i]);
     }
 
     std::string jsonData = buildJsonData(ft);
-    std::string out = buildFinalOutput(jsonData, sequence);
-    std::cout << out << std::endl;
+    std::string out = buildFinalOutputFinal(ft, sequence, maxFrame);
 
 #ifdef SHOW_FINAL_RESULTS
-    std::cout << out << std::endl;
+    std::cout << "============ OUT ============ \n" << out << std::endl;
 #endif
 
 #ifdef MEMORY_DEBUG

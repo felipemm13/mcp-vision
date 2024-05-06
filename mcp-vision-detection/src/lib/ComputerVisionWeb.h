@@ -2,7 +2,8 @@
 #define MAIN_H
 
 //#define SHOW_INTERMEDIATE_RESULTS
-//#define SHOW_FINAL_RESULTS
+#define SHOW_FINAL_RESULTS
+
 //#define MEMORY_DEBUG
 
 #include "CommonDefinitions.h"
@@ -40,7 +41,10 @@ public:
     // d: distance to nearest center       (odist1, odist2)
     
     std::string buildJsonData(FeetTracker &ft);
-    std::string mainFunction(std::string contourjson, std::string videoUrl, std::string imageUrl, std::string jsonString, std::string frameRate);
+    std::string mainFunction(std::string contourjson, std::string videoUrl, std::string imageUrl, std::string jsonString);
     std::string buildFinalOutput(std::string jsonData, std::vector<MarkAndTime> sequence);
+    std::string buildFinalOutputImproved(FeetTracker &ft, std::vector<MarkAndTime> sequence, int maxFrame);
+    std::string buildFinalOutputFinal(FeetTracker &ft, std::vector<MarkAndTime> sequence, int maxFrame);
 };
+
 #endif // ComputerVisionWeb_H

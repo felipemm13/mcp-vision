@@ -23,221 +23,6 @@ FeetTracker::FeetTracker(uint num_frames) : frame_count(0), left_foot(num_frames
 {
 }
 
-// Finds the intersection of two lines, or returns false.
-// The lines are defined by (o1, p1) and (o2, p2).
-bool FeetTracker::segmentIntersection(cv::Point2i &o1, cv::Point2i &p1, cv::Point2i &o2, cv::Point2i &p2, cv::Point2i &r)
-{
-    float s02_x, s02_y, s10_x, s10_y, s32_x, s32_y, s_numer, t_numer, denom, t;
-    s10_x = p1.x - o1.x;
-    s10_y = p1.y - o1.y;
-    s32_x = p2.x - o2.x;
-    s32_y = p2.y - o2.y;
-
-    denom = s10_x * s32_y - s32_x * s10_y;
-    if (denom == 0)
-        return false; // Collinear
-    bool denomPositive = denom > 0;
-
-    s02_x = o1.x - o2.x;
-    s02_y = o1.y - o2.y;
-    s_numer = s10_x * s02_y - s10_y * s02_x;
-    if ((s_numer < 0) == denomPositive)
-        return false; // No collision
-
-    t_numer = s32_x * s02_y - s32_y * s02_x;
-    if ((t_numer < 0) == denomPositive)
-        return false; // No collision
-
-    if (((s_numer > denom) == denomPositive) || ((t_numer > denom) == denomPositive))
-        return false; // No collision
-    // Collision detected
-    t = t_numer / denom;
-    r.x = o1.x + (t * s10_x);
-    r.y = o1.y + (t * s10_y);
-
-    return true;
-}
-
-std::vector<cv::Point2i> FeetTracker::searchSegmentIntersections(cv::Point2i &pp1, cv::Point2i &pp2,
-                                                                 std::vector<cv::Point2i> &p,
-                                                                 std::vector<uint> &p_inter_id)
-{
-    cv::Point2i r;
-    std::vector<cv::Point2i> rr;
-    uint psize = p.size();
-    for (uint i = 0; i < psize; ++i)
-        if (segmentIntersection(pp1, pp2, p[i], p[(i + 1) % psize], r))
-        { // There is intersectoin
-            p_inter_id.push_back(i);
-            rr.push_back(r);
-        }
-    return rr;
-}
-
-// For Convex polygon, max 2 intersections per segment...
-std::vector<cv::Point2i> FeetTracker::intersectConvexPolygons(std::vector<cv::Point2i> &p_wall, std::vector<cv::Point2i> &p)
-{
-    uint psize = p.size(), num_in = 0;
-    int first_in = -1;
-    std::vector<int> in(psize);
-    for (uint i = 0; i < psize; ++i)
-        if ((in[i] = cv::pointPolygonTest(p_wall, p[i], true)) >= 0)
-        {
-            if (first_in == -1)
-                first_in = i;
-            ++num_in;
-        }
-
-    // Non inside: return None
-    if (num_in == 0)
-    {
-        std::vector<int> in2(psize);
-        uint pwsize = p_wall.size(), num_in2 = 0;
-        for (uint i = 0; i < pwsize; ++i)
-            if ((in2[i] = cv::pointPolygonTest(p, p_wall[i], true)) > 0)
-                num_in2++;
-
-        // Return wall if all wall points inside
-        if (num_in2 == pwsize)
-            return p_wall;
-
-        // If some point of wall inside, and non of the polygon p, case is covered inverting order.
-        if (num_in2 > 0)
-            return intersectConvexPolygons(p, p_wall);
-
-        // Else, check for intersection points, and add them (no point of one polygon into the other)
-        std::vector<cv::Point2i> r, r2;
-        bool added = false;
-        for (uint j = 0; j < psize; ++j)
-        {
-            std::vector<uint> wall_inter_id;
-            uint next = (j + 1) % psize;
-            std::vector<cv::Point2i> intersections = searchSegmentIntersections(p[j], p[next], p_wall, wall_inter_id);
-            uint num_int = intersections.size();
-            for (uint k = 0; k < num_int; ++k)
-            {
-                r.push_back(intersections[k]);
-                added = true;
-            }
-        }
-
-        if (added)
-        {
-            cv::convexHull(r, r2);
-            return r2;
-        }
-        // If no input, return empty polygon
-        return std::vector<cv::Point2i>();
-    }
-    else if (num_in == psize)
-        return p;
-
-    std::vector<int> in2(psize);
-    uint pwsize = p_wall.size(), num_in2 = 0;
-    for (uint i = 0; i < pwsize; ++i)
-        if ((in2[i] = cv::pointPolygonTest(p, p_wall[i], true)) > 0)
-            num_in2++;
-
-    uint i = first_in, j = 0;
-    int other_p_out = -1;
-    std::vector<cv::Point2i> r;
-
-    while (j <= psize)
-    {
-        if (in[i] >= 0)
-        { // If current point in, add it
-            if (other_p_out != -1)
-            { // It comes from the outside
-                std::vector<uint> wall_inter_id;
-                uint prev = i == 0 ? psize - 1 : i - 1;
-                std::vector<cv::Point2i> intersections = searchSegmentIntersections(p[prev], p[i], p_wall, wall_inter_id);
-                uint num_int = intersections.size();
-                if (num_int != 1)
-                { // If there is no just one, coming from inside, the other polygon is not convex?
-                    std::cerr << "Something is wrong!! Should have intersected!" << std::endl;
-                    return r;
-                }
-
-                if (other_p_out != wall_inter_id[0])
-                { // It means we need to add wall points...
-                    // Check begginning, end and sense:
-                    uint beggining;
-                    if (in2[other_p_out] < 0) // Starting point of wall segment is out, start from next;
-                        beggining = (other_p_out + 1) % pwsize;
-                    else
-                        beggining = other_p_out;
-                    if (in2[(beggining + 1) % pwsize] > 0)
-                        for (uint k = beggining; in2[k % pwsize] > 0; ++k)
-                            r.push_back(p_wall[k % pwsize]);
-                    else
-                        for (uint k = beggining; in2[k % pwsize] > 0; --k)
-                            r.push_back(p_wall[k % pwsize]);
-                }
-                // Reaching here, we add intersection point
-                r.push_back(intersections[0]);
-            }
-            // Finally we add current inner point
-            if (j < psize)
-                r.push_back(p[i]);
-            other_p_out = -1;
-        }
-        else
-        { // If not... add intersections and inner points of the other polygons
-            std::vector<uint> wall_inter_id;
-            cv::Point2i last = r.back();
-            uint prev = i == 0 ? psize - 1 : i - 1;
-            std::vector<cv::Point2i> intersections = searchSegmentIntersections(p[prev], p[i], p_wall, wall_inter_id);
-            uint num_int = intersections.size();
-            if (other_p_out == -1)
-            { // Comes from inside
-                if (num_int != 1)
-                { // If there is no just one, coming from inside, the other polygon is not convex?
-                    std::cerr << "Something is wrong!! Should have intersected!" << std::endl;
-                    return r;
-                }
-                // Reaching here, we add intersection point
-                r.push_back(intersections[0]);
-                other_p_out = wall_inter_id[0];
-            }
-            else
-            { // Comes from outside: Could be double intersection or none (if none, ignore)
-                if (num_int == 2)
-                { // Add both intersections, nearest first
-                    cv::Point2i pp1 = intersections[0], pp2 = intersections[1];
-                    float d1 = sqrt((last.x - pp1.x) * (last.x - pp1.x) + (last.y - pp1.y) * (last.y - pp1.y)),
-                          d2 = sqrt((last.x - pp2.x) * (last.x - pp2.x) + (last.y - pp2.y) * (last.y - pp2.y));
-                    if (d1 < d2)
-                    {
-                        r.push_back(pp1);
-                        r.push_back(pp2);
-                        other_p_out = wall_inter_id[1];
-                    }
-                    else if (d1 > d2)
-                    {
-                        r.push_back(pp2);
-                        r.push_back(pp1);
-                        other_p_out = wall_inter_id[0];
-                    }
-                    else
-                    { // Same point. A corner? Add one...
-                        r.push_back(pp1);
-                        other_p_out = wall_inter_id[0] > wall_inter_id[1] ? wall_inter_id[0] : wall_inter_id[1];
-                    }
-                }
-                else if (num_int != 0)
-                { // If is not 0 or 2, the other polygon is not convex?
-                    std::cerr << "Something is wrong!! Not possible in convex polygons!" << std::endl;
-                    return r;
-                }
-            }
-        }
-        i = (i + 1) % psize;
-        ++j;
-    }
-
-    return r;
-}
-
 inline cv::Point2i FeetTracker::getRectCenter(cv::Rect &r)
 {
     return cv::Point2i(round(r.x + r.width / 2), round(r.y + r.height / 2));
@@ -267,29 +52,31 @@ void FeetTracker::processSteps(int index, int frame, std::map<int, std::vector<c
         right_step[index] = 1;
     }
 
+    //int obj = insideObjective(left, left_step[index], right, right_step[index], objectiveImPos);
+    //in_objective.push_back(obj);
 #ifdef SHOW_INTERMEDIATE_RESULTS
-    if (obj > 0)
-    {
-        std::cout << "Inside objective " << obj << std::endl;
-    }
-    std::cout << "Processed step frame: " << frame << std::endl;
+//    if (obj > 0)
+//    {
+//        std::cout << "Inside objective " << obj << std::endl;
+//    }
+//    std::cout << "Processed step frame: " << frame << std::endl;
 #endif
 }
 
-void FeetTracker::processAvailableStepsWithCoverageArea(int index)
+void FeetTracker::processAvailableStepsWithCoverageArea(int index, int cur_objective)
 {
     int pos_correction = frames_to_store / 2 + 3;
     if (index >= pos_correction)
     {
         int sframe = index - pos_correction + 1;
-        processStepsWithCoverageArea(index - pos_correction, sframe, sframes[sframe]);
+        processStepsWithCoverageArea(index - pos_correction, sframe, sframes[sframe], cur_objective);
         sframes.erase(sframe);
         smasks.erase(sframe);
         spos.erase(sframe);
     }
 }
 
-void FeetTracker::processStepsWithCoverageArea(int index, int frame, cv::Mat &current)
+void FeetTracker::processStepsWithCoverageArea(int index, int frame, cv::Mat &current, int cur_objective)
 {
     smoothDisplacement(index);
     smoothBBoxes(index);
@@ -326,30 +113,51 @@ void FeetTracker::processStepsWithCoverageArea(int index, int frame, cv::Mat &cu
         std::cout << "Right foot position:" << p.x << ", " << p.y << std::endl;
     }
 
+    int fontFace = cv::FONT_HERSHEY_SIMPLEX;
+    double fontScale = 0.8;
+    int thickness = 2;
 
     sframes[frame].copyTo(cur_copy2);
-    if (left_step[index])
+    if (left_step[index]) {
         cv::rectangle(cur_copy2, left, cv::Scalar(0, 255, 0));
-    //else
-        //cv::rectangle(cur_copy2, left, cv::Scalar(0, 0, 255)); // Left
-    if (right_step[index])
+        std::string text = "L";
+        cv::putText(cur_copy2, text, cv::Point(left.x+1,left.y + left.height - 3), fontFace, fontScale, cv::Scalar(255, 255, 255),              thickness);
+    } else
+        cv::rectangle(cur_copy2, left, cv::Scalar(0, 0, 255)); // Left
+    if (right_step[index]) {
         cv::rectangle(cur_copy2, right, cv::Scalar(0, 255, 0));
-    //else
-    //    cv::rectangle(cur_copy2, right, cv::Scalar(0, 255, 255)); // Right
+        std::string text = "R";
+        cv::putText(cur_copy2, text, cv::Point(right.x+1,right.y + right.height - 3), fontFace, fontScale, cv::Scalar(255, 255, 255), thickness);
+    } else
+        cv::rectangle(cur_copy2, right, cv::Scalar(0, 0, 255)); // Right
 
-    drawObjectives(cur_copy2 , index_contour+1);
+    drawObjectives(cur_copy2 , index_contour+1, cur_objective);
+
+    fontScale = 0.5;
+    for(int i=0; i<contourCenters.size(); ++i) {
+        std::string text = std::to_string(i+1);
+        cv::Point2f &p = contourCenters[i];
+        //std::cout << "Objective " << i+1 << ": " << p.x << ", " << p.y << std::endl; 
+        cv::circle(cur_copy2, cv::Point(rint(p.x), rint(p.y)), 2, cv::Scalar(255, 255, 0));
+        cv::putText(cur_copy2, text, cv::Point(rint(p.x)+5, rint(p.y)), fontFace, fontScale, cv::Scalar(255, 255, 0),              thickness);
+    }
     
     if (left_step[index])
-        cv::circle(cur_copy2, left_foot[index], 1, cv::Scalar(0, 0, 255));
+        cv::circle(cur_copy2, left_foot[index], 3, cv::Scalar(0, 255, 255));
+
     if (right_step[index])
-        cv::circle(cur_copy2, right_foot[index], 1, cv::Scalar(0, 0, 255));
+        cv::circle(cur_copy2, right_foot[index], 3, cv::Scalar(0, 255, 255));
     // cv::resize(cur_copy2, cur_copy2, cv::Size(4*cur_copy2.cols, 4*cur_copy2.rows));
+    fontScale = 1.0;
+    std::string text = "Frame: " + std::to_string(frame) + "  Index: " + std::to_string(index);
+    cv::putText(cur_copy2, text, cv::Point(10,30), fontFace, fontScale, cv::Scalar(0, 255, 0), thickness);
 
     cv::namedWindow("Everything", cv::WINDOW_NORMAL);
     cv::resizeWindow("Everything", 1920, 1000);
     cv::imshow("Everything", cur_copy2);
+    cv::waitKey(0);
     saveResult(cur_copy2, frame);
-    cv::waitKey(1);
+    //cv::waitKey(1);
 #endif
 }
 
@@ -392,12 +200,16 @@ void FeetTracker::processSteps(int index, int frame, cv::Mat &current, std::map<
             cv::rectangle(cur_copy2, right, cv::Scalar(0, 255, 255)); // Right
     }
 
+    //int obj = insideObjective(left, left_step[index], right, right_step[index], objectiveImPos);
+    //in_objective.push_back(obj);
 #ifdef SHOW_INTERMEDIATE_RESULTS
-    if (obj > 0)
-    {
-        std::cout << "Inside objective " << obj << std::endl;
-    }
+//    if (obj > 0)
+//    {
+//        std::cout << "Inside objective " << obj << std::endl;
+//    }
 #endif
+    //if (showSteps || saveSteps)
+    //    drawObjectives(cur_copy2, obj, objectiveImPos);
 
 #ifdef SHOW_INTERMEDIATE_RESULTS
     std::cout << "Processed step frame: " << frame << std::endl;
@@ -408,6 +220,8 @@ void FeetTracker::processSteps(int index, int frame, cv::Mat &current, std::map<
     if (showSteps)
     {
         cv::resize(cur_copy2, cur_copy2, cv::Size(current.cols * 3, current.rows * 3));
+        //cv::imshow("Steps Smooth", cur_copy2);
+        // cv::waitKey(0);
     }
 }
 
@@ -1756,7 +1570,7 @@ bool FeetTracker::orientation_change(int index, int value, bool left, bool is_x)
             continue;
         if ((value>0 && d<0) || (value<0 && d>0)) {
             if(abs(acc_d) > min_displacement)
-                return true;
+        return true;
         }
     }
 
@@ -1804,26 +1618,35 @@ bool FeetTracker::stepCriteriaAdvanced(int index, int Dx, int Dy, bool left) {
 
 bool FeetTracker::leftStepCriteria(int index){
     return leftStepCriteriaAdvanced(index);
+    // if (abs(Dx_left_s[index]) + abs(Dy_left_s[index]) < min_displacement)
+    //     return true;
+    // return false;
 }
 
-bool FeetTracker::rightStepCriteria(int index){
+bool FeetTracker::rightStepCriteria(int index)
+{
     return rightStepCriteriaAdvanced(index);
+    // if (abs(Dx_right_s[index]) + abs(Dy_right_s[index]) < min_displacement)
+    //     return true;
+    // return false;
 }
 
-bool FeetTracker::leftStepCriteriaAdvanced(int index){
+bool FeetTracker::leftStepCriteriaAdvanced(int index) {
     return stepCriteriaAdvanced(index, Dx_left_s[index], Dy_left_s[index], true);
 }
 
-bool FeetTracker::rightStepCriteriaAdvanced(int index){
+bool FeetTracker::rightStepCriteriaAdvanced(int index) {
     return stepCriteriaAdvanced(index, Dx_right_s[index], Dy_right_s[index], false);
 }
 
-float FeetTracker::distance(cv::Point2f &p1, cv::Point2f &p2){
+float FeetTracker::distance(cv::Point2f &p1, cv::Point2f &p2)
+{
     float dx = p1.x - p2.x, dy = p1.y - p2.y;
     return sqrt(dx * dx + dy * dy);
 }
 
-cv::Point2f FeetTracker::transformInv(cv::Point2f p){
+cv::Point2f FeetTracker::transformInv(cv::Point2f p)
+{
     cv::Mat pin(3, 1, CV_64FC1);
     pin.at<double>(0, 0) = (p.x * calib_w) / real_w;
     pin.at<double>(1, 0) = (p.y * calib_h) / real_h;
@@ -1892,6 +1715,14 @@ cv::Point2f FeetTracker::getStepPosition(int frame, cv::Rect &feet)
     pixel_pos.x = mx + feet.x;
     pixel_pos.y = my + feet.y;
 
+    /*    cv::cvtColor(roi, br_color, cv::COLOR_GRAY2BGR);
+        cv::circle(br_color, cv::Point(rint(mx), rint(my)), 1, cv::Scalar(0,0,255));
+        cv::resize(br_color, big_roi, cv::Size(roi.cols*4, roi.rows*4));
+        cv::imshow("Feet ROI", big_roi);
+        std::cout << "Count: " << count << std::endl;
+        std::cout << "(mx, my): " << mx << ", " << my << std::endl;
+        cv::waitKey(0); */
+
     return pixel_pos;
 }
 
@@ -1942,8 +1773,31 @@ bool isContourFullyInside(const std::vector<cv::Point2f> &shapePoints, const std
     return true;  // Todos los puntos están dentro de la forma
 }
 
+//Funcion que modifica la siguiente para mejorar el criterio de contacto del pie con un objetivo:
+bool FeetTracker::feetIntersectsObjective(cv::Rect rect, std::vector<cv::Point2i> &contour) {
+    
+    //Adjust feet if is too tall (assume it can be at most as tall as wide, and that contact zone will be at most at half size of feet box):
+    //1. Feet correction (at most as tall as wide)
+    if(rect.width < rect.height) {
+        rect.y +=  rect.height - rect.width;
+        rect.height = rect.width;
+    }
+    //2. Take the 50% of feet box as contact zone:
+    rect.y += rect.height/2;
+    rect.height /= 2;
+    
+    //Set feet polygon:
+    std::vector<cv::Point2i> feetPoints = {
+        {rect.x, rect.y},
+        {rect.x + rect.width, rect.y},
+        {rect.x + rect.width, rect.y + rect.height},
+        {rect.x, rect.y + rect.height}
+    };
+    return isPolygonIntersection(feetPoints, contour);
+}
+
 // Función principal que verifica si un rectángulo intersecta con un contorno
-bool rectIntersectsContour(const cv::Rect &rect, const std::vector<cv::Point2f> &contour) {
+bool FeetTracker::rectIntersectsContour(const cv::Rect &rect, const std::vector<cv::Point2f> &contour) {
     // Convertir rectángulo a contorno de puntos
     std::vector<cv::Point2f> rectPoints = {
         {rect.x, rect.y},
@@ -1979,7 +1833,7 @@ bool rectIntersectsContour(const cv::Rect &rect, const std::vector<cv::Point2f> 
 }
 
 // Threshold for determining closeness to a contour
-const float CLOSENESS_THRESHOLD = 10.0f;
+const float CLOSENESS_THRESHOLD = 5.0f;
 
 // Determines if a step intersects with or is close to a contour
 int FeetTracker::intersectsObjective(cv::Mat &img, int index, int frame, cv::Rect &leftStep, bool leftStepOccurred, cv::Rect &rightStep, bool rightStepOccurred)
@@ -2004,6 +1858,26 @@ int FeetTracker::intersectsObjective(cv::Mat &img, int index, int frame, cv::Rec
         return minDistance;
     };
 
+    auto minSceneDistanceToRectContour = [&](const cv::Rect &stepRect, const std::vector<cv::Point2f> &scene_contour) -> float
+    {
+        std::vector<cv::Point2f> rectPoints = {
+            imageToScene(cv::Point2f(stepRect.tl())),
+            imageToScene(cv::Point2f(stepRect.br().x, stepRect.tl().y)),
+            imageToScene(cv::Point2f(stepRect.br())),
+            imageToScene(cv::Point2f(stepRect.tl().x, stepRect.br().y))};
+
+        float minDistance = FLT_MAX;
+        for (const auto &rectPoint : rectPoints)
+        {
+            for (int i = 0; i < scene_contour.size(); i++)
+            {
+                float distance = calculatePointToLineDistance(scene_contour[i], scene_contour[(i + 1) % scene_contour.size()], rectPoint);
+                minDistance = std::min(minDistance, distance);
+            }
+        }
+        return minDistance;
+    };
+
     float distance_left = 0;
     float minDistance_left = FLT_MAX;
     float id_minDist_left = FLT_MAX;
@@ -2015,69 +1889,57 @@ int FeetTracker::intersectsObjective(cv::Mat &img, int index, int frame, cv::Rec
     bool intersects_right = false;
 
     bool flagIntersect = false;
-    bool flagFirst = true;
 
-    for (int contourIndex = 0; contourIndex < this->contours.size(); contourIndex++)
-    {
-        const Contour &contour = this->contours[contourIndex];
-        distance_left = minDistanceToRectContour(leftStep, contour.points);
+    for (int contourIndex = 0; contourIndex < this->contours.size(); contourIndex++) {
+        
+        Contour &contour = this->contours[contourIndex];
+        Contour &scene_contour = this->contoursScene[contourIndex];
+        //std::vector<cv::Point2f> contourPoints2f = convertToPoint2f(contour.points);
+        //distance_left = minDistanceToRectContour(leftStep, contour.points);
+        distance_left = minSceneDistanceToRectContour(leftStep, scene_contour.points);
         if (distance_left < minDistance_left) {
             minDistance_left = distance_left;
             id_minDist_left = contourIndex;
         }
 
-        if (id_minDist_left != 4 && flagFirst) {
-            flagFirst = false;
-        }
+        intersects_left = feetIntersectsObjective(leftStep, contour.ipoints);
+        this->left_intersects[index] = 0;
 
-        intersects_left = rectIntersectsContour(leftStep, contour.points);
-        
-        if ((flagFirst && (minDistance_left < CLOSENESS_THRESHOLD) && leftStepOccurred) || (!flagFirst && (intersects_left && leftStepOccurred)))
-        {
+        if (intersects_left && leftStepOccurred) {
             // Intersection or closeness logic for left step
             this->odist1[index] = 0;
             this->left_foot[index] = getStepPosition(frame, leftStep);
-            this->in_objective1[index] = contourIndex;
-            std::cout << "Intersect left_foot frame: " << frame << " contourIndex: "<< contourIndex <<std::endl;
+            this->in_objective1[index] = contourIndex+1;
+//            std::cout << "Intersect left_foot frame: " << frame << " contourIndex: "<< contourIndex <<std::endl;
             flagIntersect = true;
             this->left_intersects[index] = 1;
-            this->right_intersects[index] = 1;
-        }
-        else {
+        } else {
             this->odist1[index] = minDistance_left;
-            this->in_objective1[index] = id_minDist_left;
+            this->in_objective1[index] = id_minDist_left+1;
             this->left_foot[index] = getStepPosition(frame, leftStep);
-            this->left_intersects[index] = 0;
         }
 
-        distance_right = minDistanceToRectContour(rightStep, contour.points);
+        distance_right = minSceneDistanceToRectContour(rightStep, scene_contour.points);
         if (distance_right < minDistance_right) {
             minDistance_right = distance_right;
             id_minDist_right = contourIndex;
         }
 
-        if (id_minDist_right != 4 && flagFirst) {
-            flagFirst = false;
-        }
+        intersects_right = feetIntersectsObjective(rightStep, contour.ipoints);
+        this->right_intersects[index] = 0;
 
-        intersects_right = rectIntersectsContour(rightStep, contour.points);
-
-        if ((flagFirst && (minDistance_right < CLOSENESS_THRESHOLD) && rightStepOccurred) || (!flagFirst && (intersects_right && rightStepOccurred)))
-        {
+        if (intersects_right && rightStepOccurred) {
             // Intersection or closeness logic for right step
             this->odist2[index] = 0;
             this->right_foot[index] = getStepPosition(frame, rightStep);
-            this->in_objective2[index] = contourIndex;
-            std::cout << "Intersect right_foot frame: " << frame << " contourIndex: "<< contourIndex <<std::endl;
+            this->in_objective2[index] = contourIndex+1;
+//            std::cout << "Intersect right_foot frame: " << frame << " contourIndex: "<< contourIndex <<std::endl;
             flagIntersect = true;
-            this->left_intersects[index] = 1;
             this->right_intersects[index] = 1;
-        }
-        else {
+        } else {
             this->odist2[index] = minDistance_right;
-            this->in_objective2[index] = id_minDist_right;
+            this->in_objective2[index] = id_minDist_right+1;
             this->right_foot[index] = getStepPosition(frame, rightStep);
-            this->right_intersects[index] = 0;
         }
         if (flagIntersect) {
             return contourIndex;
@@ -2085,6 +1947,13 @@ int FeetTracker::intersectsObjective(cv::Mat &img, int index, int frame, cv::Rec
     }
     return 1000;
 }
+
+
+
+
+
+
+
 
 // Note: You need to define how close a step needs to be to a Contorno to be considered intersecting or in proximity.
 // Adjust the threshold in the condition accordingly.
@@ -2119,13 +1988,26 @@ void FeetTracker::insideObjective(int index, int frame, cv::Rect &left, bool lst
         for (int contourIndex = 0; contourIndex < this->contours.size(); contourIndex++)
         {
             const Contour &contour = this->contours[contourIndex];
+            //std::vector<cv::Point2f> contourPoints2f = convertToPoint2f(contour.points);
             distance = minDistanceToPointContour(lpos_cm, contour.points);
             if (distance < min_dist)
             {
                 min_dist = distance;
                 min_ind = contourIndex + 1;
             }
+            // minDistance = std::min(min_dist, distance);
+            // intersects = rectIntersectsContour(left, contourPoints2f);
         }
+        // for (uint i = 0; i < 9; ++i)
+        // {
+        //     cv::Point2f &scene_pos = scenePoints[i];
+        //     d = distance(lpos_cm, scene_pos);
+        //     if (d < min_dist)
+        //     {
+        //         min_dist = d;
+        //         min_ind = i + 1;
+        //     }
+        // }
         in_objective1[index] = min_ind;
         this->odist1[index] = min_dist;
     }
@@ -2138,7 +2020,7 @@ void FeetTracker::insideObjective(int index, int frame, cv::Rect &left, bool lst
         cv::Point2f rpos = getStepPosition(frame, right), rpos_cm = transformInv(rpos);
         left_foot[index] = rpos;
 
-        for      (int contourIndex = 0; contourIndex < this->contours.size(); contourIndex++)
+        for (int contourIndex = 0; contourIndex < this->contours.size(); contourIndex++)
         {
             const Contour &contour = this->contours[contourIndex];
             //std::vector<cv::Point2f> contourPoints2f = convertToPoint2f(contour.points);
@@ -2154,7 +2036,45 @@ void FeetTracker::insideObjective(int index, int frame, cv::Rect &left, bool lst
     }
 }
 
-void FeetTracker::drawObjectives(cv::Mat &img, int id)
+// int FeetTracker::insideObjective(cv::Rect &left, bool lstep, cv::Rect &right, bool rstep, std::map<int, std::vector<cv::Point2i>> &objectiveImPos)
+// {
+//     if (!lstep && !rstep)
+//         return -1;
+//     cv::Point2i pl, pr;
+//     double ldist, rdist, ref_dist = 0.5;
+//     for (uint i = 1; i <= 9; ++i)
+//     {
+//         std::vector<cv::Point2i> &pos = objectiveImPos[i];
+//         if (lstep)
+//         {
+//             pl = getRectCenter(left);
+//             ldist = cv::pointPolygonTest(pos, pl, true);
+//             if (ldist > ref_dist)
+//                 return i;
+//         }
+//         if (rstep)
+//         {
+//             pr = getRectCenter(right);
+//             rdist = cv::pointPolygonTest(pos, pr, true);
+//             if (rdist > ref_dist)
+//                 return i;
+//         }
+//     }
+//     return -1;
+// }
+
+cv::Point2f FeetTracker::imageToScene(cv::Point2i p) {
+    cv::Mat pin(3, 1, CV_64FC1);
+    pin.at<double>(0,0) = p.x*calib_w/real_w;
+    pin.at<double>(1,0) = p.y*calib_h/real_h;
+    pin.at<double>(2,0) = 1;
+    cv::Mat pout = H*pin;
+    return cv::Point2f(pout.at<double>(0,0)/pout.at<double>(2,0),
+                       pout.at<double>(1,0)/pout.at<double>(2,0));
+}
+
+
+void FeetTracker::drawObjectives(cv::Mat &img, int id, int cur_objective)
 {
     for (const auto& contour : contours) {
         std::vector<cv::Point> cv_contour;
@@ -2169,13 +2089,38 @@ void FeetTracker::drawObjectives(cv::Mat &img, int id)
             double fontScale = 1.0;
             int thickness = 2;
             cv::putText(img, text, center, fontFace, fontScale, cv::Scalar(255, 0, 255), thickness);
-            cv::polylines(img, cv_contour, true, cv::Scalar(255, 0, 255), 2);
-        }else{
+            if(id == cur_objective || id == 5)
+                cv::polylines(img, cv_contour, true, cv::Scalar(0, 255, 0), 2);
+            else
+                cv::polylines(img, cv_contour, true, cv::Scalar(0, 0, 255), 2);
+        } else if(contour.z == cur_objective) {
+            cv::polylines(img, cv_contour, true, cv::Scalar(0, 255, 255), 2);        
+        } else {
             cv::polylines(img, cv_contour, true, cv::Scalar(255, 0, 0), 2);
         }
     }
 
+    /*for (int i = 1; i <= 9; ++i)
+    {
+        std::vector<cv::Point2i> &pos = objImPos[i];
+        if ((i == obj1 && d1 < max_cm_to_center) || (i == obj2 && d2 < max_cm_to_center))
+            cv::polylines(img, pos, true, cv::Scalar(0, 255, 0), 2);
+        else
+            cv::polylines(img, pos, true, cv::Scalar(255, 255, 0));
+    }*/
 }
+
+/*void FeetTracker::drawObjectives(cv::Mat &img, int obj, std::map<int, std::vector<cv::Point2i>> &objectiveImPos)
+{
+    for (int i = 1; i <= 9; ++i)
+    {
+        std::vector<cv::Point2i> &pos = objectiveImPos[i];
+        if (i == obj)
+            cv::polylines(img, pos, true, cv::Scalar(0, 255, 0), 2);
+        else
+            cv::polylines(img, pos, true, cv::Scalar(255, 255, 0));
+    }
+}*/
 
 // Blind association of left and right
 void FeetTracker::associateLeftAndRight(std::vector<cv::Rect> &fbboxes, cv::Rect &left, cv::Rect &right)
