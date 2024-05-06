@@ -8,6 +8,7 @@
         "src/lib/ExtendedContour.cpp",
         "src/lib/FeetTracker.cpp",
         "src/lib/ComputerVisionWeb.cpp",
+        "src/lib/CommonDefinitions.cpp",
         "src/lib/MainAddon.cc",
         "src/main.cc"
       ],
