@@ -1859,7 +1859,7 @@ cv::Mat recalibrateHomography(std::vector<cv::Point2f> &contourCenters) {
 
         
 
-std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string videoUrl, std::string imageUrl, std::string jsonString) {
+std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string videoUrl, std::string imageUrl, std::string jsonString, std::string frameRate) {
     // String contornos se debe pasar a std::vector<Contour>
     std::istringstream iss(contourjson);
 
@@ -1903,11 +1903,10 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
     cv::VideoCapture vtest;
     vtest.open(urlVideo);
 
-    int frame_rate = 0;
+    float frame_rate = 0.0f;
     if (vtest.isOpened())
     {
-        frame_rate = vtest.get(cv::CAP_PROP_FPS);
-        std::cout << frame_rate << std::endl;
+        frame_rate = std::stof(frameRate);
     }
     else
     {
@@ -2286,7 +2285,7 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
 #ifdef SHOW_INTERMEDIATE_RESULTS
             std::cout << "Frame: " << frame << std::endl;
 #endif
-            ft.processAvailableStepsWithCoverageArea(i);
+            // ft.processAvailableStepsWithCoverageArea(i);
             // ft.processAvailableStepsWithDistanceToCenter(i);
         }
 
