@@ -1887,6 +1887,8 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
         contornos.push_back(contorno);
     }
 
+    std::cout << "jsonString: " << std::endl;
+    std::cout << jsonString << std::endl;
     // String sequence se debe pasar a std::vector<MarkAndTime>
     std::vector<MarkAndTime> sequence = parseSimpleJson(jsonString);
 
