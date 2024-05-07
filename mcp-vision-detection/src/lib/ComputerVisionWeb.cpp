@@ -1882,6 +1882,7 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
         {
             cv::Point2f p{punto["x"].asInt(), punto["y"].asInt()};
             contorno.points.push_back(p);
+            contorno.ipoints.push_back(p);
         }
         contornos.push_back(contorno);
     }
