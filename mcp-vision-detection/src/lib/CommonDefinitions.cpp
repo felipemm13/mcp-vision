@@ -83,21 +83,6 @@ std::vector<cv::Point2i> intersectConvexPolygons(std::vector<cv::Point2i> &p1, s
      int first_in = -1;
     std::vector<int> in(p2size);
 
-    // Print the size of p1 and p2 
-    std::cout << "P1size: " << p1.size() << "P2size: " << p2.size() << std::endl;
-
-    // Print points in p1
-    std::cout << "Polygon p1 points:" << std::endl;
-    for (const auto& point : p1) {
-        std::cout << "(" << point.x << ", " << point.y << ")" << std::endl;
-    }
-
-    // Print points in p2
-    std::cout << "Polygon p2 points:" << std::endl;
-    for (const auto& point : p2) {
-        std::cout << "(" << point.x << ", " << point.y << ")" << std::endl;
-    }
-
     for(uint i=0; i<p2size; ++i)
         if((in[i] = cv::pointPolygonTest(p1, p2[i], true)) >= 0) {
             if(first_in == -1)
@@ -107,8 +92,8 @@ std::vector<cv::Point2i> intersectConvexPolygons(std::vector<cv::Point2i> &p1, s
 
     //Non inside: 
     if(num_in == 0) {
-        std::vector<int> in2(p2size);
         uint p1size = p1.size(), num_in2 = 0;
+        std::vector<int> in2(p1size);
         for(uint i=0; i<p1size; ++i)
             if( (in2[i] = cv::pointPolygonTest(p2, p1[i], true)) > 0)
                 num_in2++;
