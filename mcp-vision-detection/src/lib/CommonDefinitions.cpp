@@ -1,14 +1,5 @@
 #include "CommonDefinitions.h"
 
-std::vector<cv::Point2f> convertToFloatPoints(const std::vector<cv::Point2i>& intPoints) {
-    std::vector<cv::Point2f> floatPoints;
-    floatPoints.reserve(intPoints.size());
-    for (const auto& pt : intPoints) {
-        floatPoints.push_back(cv::Point2f(static_cast<float>(pt.x), static_cast<float>(pt.y)));
-    }
-    return floatPoints;
-}
-
 //Dot product between vectors u and v: 
 float dotProduct(const cv::Point2f &u, const cv::Point2f &v) {
     return u.x * v.x + u.y * v.y;    
@@ -87,12 +78,24 @@ bool isPolygonIntersection(std::vector<cv::Point2i> &p1, std::vector<cv::Point2i
 
 //For Convex polygon, max 2 intersections per segment...
 std::vector<cv::Point2i> intersectConvexPolygons(std::vector<cv::Point2i> &p1, std::vector<cv::Point2i> &p2) {
-    std::vector<cv::Point2f> p1f = convertToFloatPoints(p1);
-    std::vector<cv::Point2f> p2f = convertToFloatPoints(p2);
 
-    uint p2size = p2.size(), num_in = 0;
-    int first_in = -1;
+     uint p2size = p2.size(), num_in = 0;
+     int first_in = -1;
     std::vector<int> in(p2size);
+
+    // Print points in p1
+    std::cout << "Polygon p1 points:" << std::endl;
+    std::cout << "Psize: " << p2size << std::endl;
+    for (const auto& point : p1) {
+        std::cout << "(" << point.x << ", " << point.y << ")" << std::endl;
+    }
+
+    // Print points in p2
+    std::cout << "Polygon p2 points:" << std::endl;
+    for (const auto& point : p2) {
+        std::cout << "(" << point.x << ", " << point.y << ")" << std::endl;
+    }
+
     for(uint i=0; i<p2size; ++i)
         if((in[i] = cv::pointPolygonTest(p1, p2[i], true)) >= 0) {
             if(first_in == -1)
