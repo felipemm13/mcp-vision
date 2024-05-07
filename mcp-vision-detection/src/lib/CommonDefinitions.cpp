@@ -83,9 +83,11 @@ std::vector<cv::Point2i> intersectConvexPolygons(std::vector<cv::Point2i> &p1, s
      int first_in = -1;
     std::vector<int> in(p2size);
 
+    // Print the size of p1 and p2 
+    std::cout << "P1size: " << p1.size() << "P2size: " << p2.size() << std::endl;
+
     // Print points in p1
     std::cout << "Polygon p1 points:" << std::endl;
-    std::cout << "Psize: " << p2size << std::endl;
     for (const auto& point : p1) {
         std::cout << "(" << point.x << ", " << point.y << ")" << std::endl;
     }
