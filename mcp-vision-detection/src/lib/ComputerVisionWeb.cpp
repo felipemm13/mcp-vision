@@ -702,10 +702,9 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(FeetTracker &ft, std::vecto
     //in_objective1, in_objective2
     //odist1, odist2
     
-    for (int i = 0; i < maxFrame; ++i) {
-        std::cout << "Frame Index: " << i << "\n\tLeft: " << ft.in_objective1[i] << "\n\tRight: " << ft.in_objective2[i] << std::endl;
-        
-    }
+    // for (int i = 0; i < maxFrame; ++i) {
+    //     std::cout << "Frame Index: " << i << "\n\tLeft: " << ft.in_objective1[i] << "\n\tRight: " << ft.in_objective2[i] << std::endl;
+    // }
     
     //Get central stimulus central position
     cv::Point2f pcentral = ft.contourCentersScene[4];
@@ -1880,8 +1879,6 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
         contornos.push_back(contorno);
     }
 
-    std::cout << "jsonString: " << std::endl;
-    std::cout << jsonString << std::endl;
     // String sequence se debe pasar a std::vector<MarkAndTime>
     std::vector<MarkAndTime> sequence = parseSimpleJson(jsonString);
 
