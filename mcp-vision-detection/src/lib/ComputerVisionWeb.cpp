@@ -1852,6 +1852,31 @@ cv::Mat recalibrateHomography(std::vector<cv::Point2f> &contourCenters) {
         
 
 std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string videoUrl, std::string imageUrl, std::string jsonString, std::string frameRate) {
+    // Construye el comando para ejecutar el script Python con los argumentos adecuados
+    std::string command = "python3 pose.py " + videoUrl;
+    
+    // Ejecuta el script Python
+    int result = system(command.c_str());
+
+    if (result != 0) {
+        std::cerr << "Error al ejecutar el script Python" << std::endl;
+        return "Error al ejecutar el script Python";
+    }
+
+    // Leer el archivo JSON generado por el script Python
+    std::ifstream inputFile("./output/frames_info.json");
+    if (!inputFile.is_open()) {
+        std::cerr << "No se pudo abrir el archivo frames_info.json" << std::endl;
+        return "No se pudo abrir el archivo frames_info.json";
+    }
+
+    // Leer el contenido del archivo JSON a una cadena
+    std::string jsonData((std::istreambuf_iterator<char>(inputFile)),
+                         (std::istreambuf_iterator<char>()));
+    inputFile.close();
+
+    std::cout << "Datos JSON obtenidos: " << jsonData << std::endl;
+   
     // String contornos se debe pasar a std::vector<Contour>
     std::istringstream iss(contourjson);
 
