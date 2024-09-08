@@ -3,8 +3,7 @@ FROM node:14-slim
 
 # Actualizar la lista de paquetes e instalar dependencias necesarias
 RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
+    python \
     make \
     g++ \
     cmake \
@@ -14,9 +13,6 @@ RUN apt-get update && apt-get install -y \
     nlohmann-json3-dev \
     libjsoncpp-dev \
     && rm -rf /var/lib/apt/lists/*
-
-# Instalar dependencias de Python necesarias para el módulo
-RUN pip3 install --no-cache-dir opencv-python-headless mediapipe numpy
 
 # Establecer el directorio de trabajo en el contenedor
 WORKDIR /usr/src/app
@@ -31,12 +27,19 @@ RUN cd mcp-vision-api && npm install --only=production
 # Instalar las dependencias de Node.js para el módulo de detección
 RUN cd mcp-vision-detection && npm install
 
+# Copiar el package.json y package-lock.json (si aplica) para ambos proyectos
+COPY mcp-vision-api/package*.json ./mcp-vision-api/
+COPY mcp-vision-detection/package*.json ./mcp-vision-detection/
+
+# Instalar las dependencias de Node.js para la API
+RUN cd mcp-vision-api && npm install --only=production
+
+# Instalar las dependencias de Node.js para el módulo de detección
+RUN cd mcp-vision-detection && npm install
+
 # Copiar el resto de los archivos de la API y del módulo de detección al contenedor
 COPY mcp-vision-api/ ./mcp-vision-api/
 COPY mcp-vision-detection/ ./mcp-vision-detection/
-
-# Copiar el script Python al contenedor (asumiendo que se encuentra en la raíz del proyecto)
-COPY script.py /usr/src/app/
 
 # Compilar el módulo nativo. Este paso asume que tu package.json en mcp-vision-detection
 # tiene un script "build" que llama a "node-gyp rebuild" o una operación similar.
