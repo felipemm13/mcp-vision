@@ -1854,7 +1854,6 @@ cv::Mat recalibrateHomography(std::vector<cv::Point2f> &contourCenters) {
 std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string videoUrl, std::string imageUrl, std::string jsonString, std::string frameRate) {
     // String contornos se debe pasar a std::vector<Contour>
     std::istringstream iss(contourjson);
-    //test
 
     Json::Value root;
     iss >> root;
