@@ -45,6 +45,8 @@ public:
     std::string buildFinalOutput(std::string jsonData, std::vector<MarkAndTime> sequence);
     std::string buildFinalOutputImproved(FeetTracker &ft, std::vector<MarkAndTime> sequence, int maxFrame);
     std::string buildFinalOutputFinal(FeetTracker &ft, std::vector<MarkAndTime> sequence, int maxFrame);
+
+    bool callApi(const std::string& videoUrl);
 };
 
 

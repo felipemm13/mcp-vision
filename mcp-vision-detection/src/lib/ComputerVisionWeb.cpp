@@ -1848,10 +1848,51 @@ cv::Mat recalibrateHomography(std::vector<cv::Point2f> &contourCenters) {
     return cv::findHomography(contourCenters, scenePoints, cv::RANSAC, 5);
 }
 
+size_t writeCallback(void* contents, size_t size, size_t nmemb, std::string* s) {
+    size_t newLength = size * nmemb;
+    s->append((char*)contents, newLength);
+    return newLength;
+}
 
-        
+bool ComputerVisionWeb::callApi(const std::string& videoUrl) {
+    CURL* curl;
+    CURLcode res;
+    std::string readBuffer;
+    
+    curl = curl_easy_init();
+    if(curl) {
+        std::string api_url = "http://blazepose-api-local:5000/process-video";
+        std::string json_payload = "{\"video_url\": \"" + videoUrl + "\"}";
+
+        struct curl_slist* headers = NULL;
+        headers = curl_slist_append(headers, "Content-Type: application/json");
+
+        curl_easy_setopt(curl, CURLOPT_URL, api_url.c_str());
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_payload.c_str());
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
+        res = curl_easy_perform(curl);
+
+        if(res != CURLE_OK) {
+            std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
+        } else {
+            std::cout << "Response from API: " << readBuffer << std::endl;
+        }
+        curl_easy_cleanup(curl);
+        return res == CURLE_OK;
+    };
+    return false;
+}
 
 std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string videoUrl, std::string imageUrl, std::string jsonString, std::string frameRate) {
+    
+    if (callApi(videoUrl)) {
+        std::cout << "Procesamiento exitoso." << std::endl;
+    } else {
+        std::cout << "Error al llamar a la API pose-IA." << std::endl;
+    }
+    
     // String contornos se debe pasar a std::vector<Contour>
     std::istringstream iss(contourjson);
 
