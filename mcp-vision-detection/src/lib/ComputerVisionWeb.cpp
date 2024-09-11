@@ -510,7 +510,6 @@ std::vector<Section> divideItemsIntoSequences(const std::vector<item>& items) {
     return sequences;
 }
 
-
 int calculateTakeoffFrame(std::vector<item> sequence) {
     for (size_t i = 1; i < sequence.size(); ++i) {
         const item& current_item = sequence[i];
@@ -575,7 +574,6 @@ void calculateArrivalFrameWithError(Section &sequence) {
         }
     }
 }
-
 
 std::string toJSON(const std::vector<Section>& sections) {
     std::string json = "[\n";
@@ -1848,10 +1846,100 @@ cv::Mat recalibrateHomography(std::vector<cv::Point2f> &contourCenters) {
     return cv::findHomography(contourCenters, scenePoints, cv::RANSAC, 5);
 }
 
+size_t writeCallback(void* contents, size_t size, size_t nmemb, std::string* s) {
+    size_t newLength = size * nmemb;
+    s->append((char*)contents, newLength);
+    return newLength;
+}
 
-        
+bool ComputerVisionWeb::callApi(const std::string& videoUrl) {
+    CURL* curl;
+    CURLcode res;
+    std::string readBuffer;
+    
+    curl = curl_easy_init();
+    if(curl) {
+        std::string api_url = "http://blazepose-api-local:5000/process-video";
+        std::string json_payload = "{\"video_url\": \"" + videoUrl + "\"}";
+
+        struct curl_slist* headers = NULL;
+        headers = curl_slist_append(headers, "Content-Type: application/json");
+
+        curl_easy_setopt(curl, CURLOPT_URL, api_url.c_str());
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_payload.c_str());
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
+        res = curl_easy_perform(curl);
+
+        if(res != CURLE_OK) {
+            std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
+        } else {
+            try {
+                json responseJson = json::parse(readBuffer);
+                json frames = responseJson["frames_info"];
+
+                // Recorrer cada frame y almacenarlo en frames_info
+                for (auto& frame : frames) {
+                    FrameInfo frameInfo;
+                    frameInfo.frame_index = frame["frame_index"];
+                    frameInfo.stepDetection = frame["stepDetection"];
+                    frameInfo.stepSide = frame["stepSide"];
+                    
+                    // Parsear la posición izquierda como cv::Point2i
+                    frameInfo.left_position.heel = cv::Point2i(frame["left_position"]["heel"][0], frame["left_position"]["heel"][1]);
+                    frameInfo.left_position.foot_index = cv::Point2i(frame["left_position"]["foot_index"][0], frame["left_position"]["foot_index"][1]);
+                    frameInfo.left_position.ankle = cv::Point2i(frame["left_position"]["ankle"][0], frame["left_position"]["ankle"][1]);
+                    frameInfo.left_position.center = cv::Point2i(frame["left_position"]["center"][0], frame["left_position"]["center"][1]);
+
+                    // Parsear la posición derecha como cv::Point2i
+                    frameInfo.right_position.heel = cv::Point2i(frame["right_position"]["heel"][0], frame["right_position"]["heel"][1]);
+                    frameInfo.right_position.foot_index = cv::Point2i(frame["right_position"]["foot_index"][0], frame["right_position"]["foot_index"][1]);
+                    frameInfo.right_position.ankle = cv::Point2i(frame["right_position"]["ankle"][0], frame["right_position"]["ankle"][1]);
+                    frameInfo.right_position.center = cv::Point2i(frame["right_position"]["center"][0], frame["right_position"]["center"][1]);
+
+                    // Almacenar en la lista frames_info
+                    frames_info.push_back(frameInfo);
+                }
+
+            } catch (const std::exception& e) {
+                std::cerr << "Error al parsear el JSON: " << e.what() << std::endl;
+            }
+        }
+        curl_easy_cleanup(curl);
+        return res == CURLE_OK;
+    }
+    return false;
+}
 
 std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string videoUrl, std::string imageUrl, std::string jsonString, std::string frameRate) {
+    if (callApi(videoUrl)) {
+        std::cout << "Procesamiento exitoso, datos recibidos desde la API de pose." << std::endl;
+        int frame_count = 0;
+
+        std::cout << "Muestra de los dos primero frames: \n"<< std::endl;
+        for (const auto& frame : frames_info) {
+            if (frame_count >= 2) {
+                break;
+            }
+
+            std::cout << "Frame Index: " << frame.frame_index << std::endl;
+            std::cout << "Step Detection: " << (frame.stepDetection ? "True" : "False") << std::endl;
+            std::cout << "Step Side: " << frame.stepSide << std::endl;
+            std::cout << "Left Heel Position: (" << frame.left_position.heel.x << ", " << frame.left_position.heel.y << ")" << std::endl;
+            std::cout << "Left Foot Index Position: (" << frame.left_position.foot_index.x << ", " << frame.left_position.foot_index.y << ")" << std::endl;
+            std::cout << "Left Ankle Position: (" << frame.left_position.ankle.x << ", " << frame.left_position.ankle.y << ")" << std::endl;
+            std::cout << "Right Heel Position: (" << frame.right_position.heel.x << ", " << frame.right_position.heel.y << ")" << std::endl;
+            std::cout << "Right Foot Index Position: (" << frame.right_position.foot_index.x << ", " << frame.right_position.foot_index.y << ")" << std::endl;
+            std::cout << "Right Ankle Position: (" << frame.right_position.ankle.x << ", " << frame.right_position.ankle.y << ")\n" << std::endl;
+
+            frame_count++;
+        }
+
+    } else {
+        std::cout << "Error al llamar a la API pose-IA." << std::endl;
+    }
+    
     // String contornos se debe pasar a std::vector<Contour>
     std::istringstream iss(contourjson);
 
