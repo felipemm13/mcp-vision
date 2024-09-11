@@ -1859,7 +1859,7 @@ bool ComputerVisionWeb::callApi(const std::string& videoUrl) {
     
     curl = curl_easy_init();
     if(curl) {
-        std::string api_url = "https://spt-group.cl/process-video";
+        std::string api_url = "https://spt-group.cl:5000/process-video";
         std::string json_payload = "{\"video_url\": \"" + videoUrl + "\"}";
 
         struct curl_slist* headers = NULL;
