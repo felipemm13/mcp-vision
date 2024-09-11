@@ -47,6 +47,7 @@ public:
     std::string buildFinalOutputFinal(FeetTracker &ft, std::vector<MarkAndTime> sequence, int maxFrame);
 
     bool callApi(const std::string& videoUrl);
+    std::vector<FrameInfo> frames_info;
 };
 
 

@@ -65,6 +65,21 @@ struct MarkAndTime {
     int frame;
 };
 
+struct Position {
+    cv::Point2i heel;
+    cv::Point2i foot_index;
+    cv::Point2i ankle;
+    cv::Point2i center;
+};
+
+struct FrameInfo {
+    int frame_index;
+    bool stepDetection;
+    std::string stepSide;
+    Position left_position;
+    Position right_position;
+};
+
 std::vector<cv::Point2i> intersectConvexPolygons(std::vector<cv::Point2i> &p1, std::vector<cv::Point2i> &p2);
 std::vector<cv::Point2i> searchSegmentIntersections(cv::Point2i &pp1, cv::Point2i &pp2, 
                                                     std::vector<cv::Point2i> &p, std::vector<uint> &p_inter_id);
