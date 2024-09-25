@@ -67,103 +67,6 @@ namespace
     }
 }
 
-// Per frame: Two feet. By foot: (x y w h code xp yp d)
-//  (x,y,w,h): foot rect                (left_step, right_step)
-//  code:                               (in_objective1, in_objective2)
-//      0: No step
-//    1-9: Step to nearest objective
-//  (xp,yp): Feet contact point         (left_foot, right_foot)
-//  d: distance to nearest center       (odist1, odist2)
-std::string ComputerVisionWeb::buildJsonData(FeetTracker &ft)
-{
-
-    std::string output = "";
-    std::string output_l_x = "";
-    std::string output_l_y = "";
-    std::string output_l_w = "";
-    std::string output_l_h = "";
-    std::string output_l_code = "";
-    std::string output_l_xp = "";
-    std::string output_l_yp = "";
-    std::string output_l_d = "";
-    std::string output_l_intersects = "";
-    std::string output_l_step = "";
-
-    std::string output_r_x = "";
-    std::string output_r_y = "";
-    std::string output_r_w = "";
-    std::string output_r_h = "";
-    std::string output_r_code = "";
-    std::string output_r_xp = "";
-    std::string output_r_yp = "";
-    std::string output_r_d = "";
-    std::string output_r_intersects = "";
-    std::string output_r_step = "";
-
-    int i, n = ft.left_step.size();
-
-    for (i = 0; i < n; ++i)
-    {
-        cv::Rect &rl = ft.left_rects_s[i];
-        cv::Rect &rr = ft.right_rects_s[i];
-        output_l_x += "{\"integerValue\": " + std::to_string(rl.x) + ",\"frame\": " + std::to_string(i) + "},";
-        output_l_y += "{\"integerValue\": " + std::to_string(rl.y) + ",\"frame\": " + std::to_string(i) + "},";
-        output_l_w += "{\"integerValue\": " + std::to_string(rl.width) + ",\"frame\": " + std::to_string(i) + "},";
-        output_l_h += "{\"integerValue\": " + std::to_string(rl.height) + ",\"frame\": " + std::to_string(i) + "},";
-        output_l_code += "{\"integerValue\": " + std::to_string(ft.in_objective1[i] + 1) + ",\"frame\": " + std::to_string(i) + "},";
-        output_l_xp += "{\"doubleValue\": " + std::to_string(ft.left_foot[i].x) + ",\"frame\": " + std::to_string(i) + "},";
-        output_l_yp += "{\"doubleValue\": " + std::to_string(ft.left_foot[i].y) + ",\"frame\": " + std::to_string(i) + "},";
-        output_l_d += "{\"doubleValue\": " + std::to_string(ft.odist1[i]) + ",\"frame\": " + std::to_string(i) + "},";
-        output_l_intersects += "{\"integerValue\": " + std::to_string(ft.left_intersects[i]) + ",\"frame\": " + std::to_string(i) + "},";
-        output_l_step += "{\"boolValue\": " + std::to_string(ft.left_step[i]) + ",\"frame\": " + std::to_string(i) + "},";
-
-        output_r_x += "{\"integerValue\": " + std::to_string(rr.x) + ",\"frame\": " + std::to_string(i) + "},";
-        output_r_y += "{\"integerValue\": " + std::to_string(rr.y) + ",\"frame\": " + std::to_string(i) + "},";
-        output_r_w += "{\"integerValue\": " + std::to_string(rr.width) + ",\"frame\": " + std::to_string(i) + "},";
-        output_r_h += "{\"integerValue\": " + std::to_string(rr.height) + ",\"frame\": " + std::to_string(i) + "},";
-        output_r_code += "{\"integerValue\": " + std::to_string(ft.in_objective2[i] + 1) + ",\"frame\": " + std::to_string(i) + "},";
-        output_r_xp += "{\"doubleValue\": " + std::to_string(ft.right_foot[i].x) + ",\"frame\": " + std::to_string(i) + "},";
-        output_r_yp += "{\"doubleValue\": " + std::to_string(ft.right_foot[i].y) + ",\"frame\": " + std::to_string(i) + "},";
-        output_r_d += "{\"doubleValue\": " + std::to_string(ft.odist2[i]) + ",\"frame\": " + std::to_string(i) + "},";
-        output_r_intersects += "{\"integerValue\": " + std::to_string(ft.right_intersects[i]) + ",\"frame\": " + std::to_string(i) + "},";
-        output_r_step += "{\"boolValue\": " + std::to_string(ft.right_step[i]) + ",\"frame\": " + std::to_string(i) + "},";
-    }
-
-    output = "{\"fields\" : {";
-    output += "\"Width\":{\"integerValue\": " + std::to_string(ft.real_w) + "},";
-    output += "\"Height\":{\"integerValue\": " + std::to_string(ft.real_h) + "},";
-    output += "\"Total frames\":{\"integerValue\": " + std::to_string(n) + "},";
-
-    output += "\"Left\": { \"mapValue\": { \"fields\": {";
-    output += "\"d\": { \"arrayValue\": {\"values\": [" + output_l_d.substr(0, output_l_d.size() - 1) + "] } },";
-    output += "\"code\": { \"arrayValue\": { \"values\": [" + output_l_code.substr(0, output_l_code.size() - 1) + "] } },";
-    output += "\"y\": { \"arrayValue\": { \"values\": [" + output_l_y.substr(0, output_l_y.size() - 1) + "] } },";
-    output += "\"yp\": { \"arrayValue\": { \"values\": [" + output_l_yp.substr(0, output_l_yp.size() - 1) + "] } },";
-    output += "\"x\": { \"arrayValue\": { \"values\": [" + output_l_x.substr(0, output_l_x.size() - 1) + "] } },";
-    output += "\"w\": { \"arrayValue\": { \"values\": [" + output_l_w.substr(0, output_l_w.size() - 1) + "] } },";
-    output += "\"xp\": { \"arrayValue\": { \"values\": [" + output_l_xp.substr(0, output_l_xp.size() - 1) + "] } },";
-    output += "\"h\": { \"arrayValue\": { \"values\": [" + output_l_h.substr(0, output_l_h.size() - 1) + "] } },";
-    output += "\"intersects\": { \"arrayValue\": { \"values\": [" + output_l_intersects.substr(0, output_l_intersects.size() - 1) + "] } },";
-    output += "\"step\": { \"arrayValue\": { \"values\": [" + output_l_step.substr(0, output_l_step.size() - 1) + "] } }";
-    output += "}}},";
-
-    output += "\"Right\": { \"mapValue\": { \"fields\": {";
-    output += "\"d\": { \"arrayValue\": {\"values\": [" + output_r_d.substr(0, output_r_d.size() - 1) + "] } },";
-    output += "\"code\": { \"arrayValue\": { \"values\": [" + output_r_code.substr(0, output_r_code.size() - 1) + "] } },";
-    output += "\"y\": { \"arrayValue\": { \"values\": [" + output_r_y.substr(0, output_r_y.size() - 1) + "] } },";
-    output += "\"yp\": { \"arrayValue\": { \"values\": [" + output_r_yp.substr(0, output_r_yp.size() - 1) + "] } },";
-    output += "\"x\": { \"arrayValue\": { \"values\": [" + output_r_x.substr(0, output_r_x.size() - 1) + "] } },";
-    output += "\"w\": { \"arrayValue\": { \"values\": [" + output_r_w.substr(0, output_r_w.size() - 1) + "] } },";
-    output += "\"xp\": { \"arrayValue\": { \"values\": [" + output_r_xp.substr(0, output_r_xp.size() - 1) + "] } },";
-    output += "\"h\": { \"arrayValue\": { \"values\": [" + output_r_h.substr(0, output_r_h.size() - 1) + "] } },";
-    output += "\"intersects\": { \"arrayValue\": { \"values\": [" + output_r_intersects.substr(0, output_r_intersects.size() - 1) + "] } },";
-    output += "\"step\": { \"arrayValue\": { \"values\": [" + output_r_step.substr(0, output_r_step.size() - 1) + "] } }";
-    output += "}}}";
-    output += "}}";
-
-    return output;
-}
-
 size_t writeData(void *ptr, size_t size, size_t nmemb, FILE *stream)
 {
     size_t written = fwrite(ptr, size, nmemb, stream);
@@ -1230,7 +1133,7 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
     std::cout << "Last processed frame: " << frame << std::endl;
     std::cout << "Max frame: " << frame << std::endl;
 #endif
-    std::string jsonData = buildJsonData(ft);
+
     std::string out = buildFinalOutputFinal(ft, sequence, maxFrame);
 
 #ifdef SHOW_FINAL_RESULTS
