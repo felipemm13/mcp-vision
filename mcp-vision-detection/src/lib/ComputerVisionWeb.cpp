@@ -3,60 +3,6 @@
 ComputerVisionWeb::ComputerVisionWeb()
 {
 }
-
-void ComputerVisionWeb::setScenePoints(std::vector<cv::Point2f> &scenePoints)
-{
-    // The nine scene points
-    scenePoints.resize(9);
-    cv::Point2f p;
-    p.x = 141.421356237;
-    p.y = 141.421356237;
-    scenePoints[0] = p; // Position 1
-    p.x = 0;
-    p.y = 200;
-    scenePoints[1] = p; // Position 2
-    p.x = -141.421356237;
-    p.y = 141.421356237;
-    scenePoints[2] = p; // Position 3
-    p.x = 200;
-    p.y = 0;
-    scenePoints[3] = p; // Position 4
-    p.x = 0;
-    p.y = 0;
-    scenePoints[4] = p; // Position 5
-    p.x = -200;
-    p.y = 0;
-    scenePoints[5] = p; // Position 6
-    p.x = 141.421356237;
-    p.y = -141.421356237;
-    scenePoints[6] = p; // Position 7
-    p.x = 0;
-    p.y = -200;
-    scenePoints[7] = p; // Position 8
-    p.x = -141.421356237;
-    p.y = -141.421356237;
-    scenePoints[8] = p; // Position 9
-}
-
-cv::Point2i ComputerVisionWeb::transform(cv::Point2f p)
-{
-    cv::Mat pin(3, 1, CV_64FC1);
-    pin.at<double>(0, 0) = p.x;
-    pin.at<double>(1, 0) = p.y;
-    pin.at<double>(2, 0) = 1;
-
-    cv::Mat pout = pin;
-
-    return cv::Point2i(rint(pout.at<double>(0, 0) / pout.at<double>(2, 0)),
-                       rint(pout.at<double>(1, 0) / pout.at<double>(2, 0)));
-}
-
-cv::Point2i ComputerVisionWeb::getPoint(cv::Point2f p)
-{
-    // Get center in image coordinates
-    return transform(p);
-}
-
 namespace
 {
     std::size_t callback(const char *in, std::size_t size, std::size_t num, std::string *out)
@@ -188,17 +134,9 @@ std::string toJSON(const std::vector<Section>& sections) {
 //    1-9: Step to nearest objective
 //  (xp,yp): Feet contact point         (left_foot, right_foot)
 //  d: distance to nearest center       (odist1, odist2)
-std::string ComputerVisionWeb::buildFinalOutputFinal(FeetTracker &ft, std::vector<MarkAndTime> sequence, int maxFrame) {
-    //in_objective1, in_objective2
-    //odist1, odist2
-    
-    // for (int i = 0; i < maxFrame; ++i) {
-    //     std::cout << "Frame Index: " << i << "\n\tLeft: " << ft.in_objective1[i] << "\n\tRight: " << ft.in_objective2[i] << std::endl;
-    // }
-    
+std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> sequence, int maxFrame) { 
     //Get central stimulus central position
     cv::Point2f pcentral = ft.contourCentersScene[4];
-    
     
     const int relevant_change = 10; //Number of centimeters for considering relevant change in position
     const int static_step = 15; //Number of frames for considering that step is not displacing
@@ -890,7 +828,7 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
             std::cout << "Step Side: " << frame.stepSide << std::endl;
             std::cout << "Left Heel Position: (" << frame.left_position.heel.x << ", " << frame.left_position.heel.y << ")" << std::endl;
             std::cout << "Left Foot Index Position: (" << frame.left_position.foot_index.x << ", " << frame.left_position.foot_index.y << ")" << std::endl;
-            std::cout << "Left Ankle Position: (" << frame.left_position.ankle.x << ", " << frame.left_position.ankle.y << ")" << std::endl;
+            std::cout << "Left Ankle Pos    ition: (" << frame.left_position.ankle.x << ", " << frame.left_position.ankle.y << ")" << std::endl;
             std::cout << "Right Heel Position: (" << frame.right_position.heel.x << ", " << frame.right_position.heel.y << ")" << std::endl;
             std::cout << "Right Foot Index Position: (" << frame.right_position.foot_index.x << ", " << frame.right_position.foot_index.y << ")" << std::endl;
             std::cout << "Right Ankle Position: (" << frame.right_position.ankle.x << ", " << frame.right_position.ankle.y << ")\n" << std::endl;
@@ -983,12 +921,11 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
 
     bool first = true;
     uint frame = 0, maxFrame, time = 0, msec_per_frame = 1000 / frame_rate,
-        initial_msec = 0, // final_msec = 10000;
-        // initial_msec = 0,
-        final_msec = INT_MAX;
-    cv::Mat fg;
+        initial_msec = 0,
+        final_msec = INT_MAX; // final_msec = 10000;
 
-    // NEW: Insert background calibration image to reinforce background
+    cv::Mat fg;
+    // Insert background calibration image
     cv::Mat bg = cv::imread(urlBG);
 
 #ifdef SHOW_INTERMEDIATE_RESULTS
@@ -1036,13 +973,6 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
     vtest.release();
     maxFrame = frame;
 
-
-    // Calibrate scene
-    std::vector<cv::Point2f> scenePoints;
-    std::map<int, std::vector<cv::Point2i>> objectiveImPos;
-
-    setScenePoints(scenePoints);
-
     std::map<int, int>::iterator frame_it = msecs.begin();
 
     vtest.open(urlVideo);
@@ -1068,17 +998,6 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
         contourCenters.push_back(cv::Point2f(xx/n, yy/n));
     }
 
-    for (int i = 1; i <= 9; i++)
-    {
-        cv::Point2f sp = scenePoints[i - 1];
-        std::vector<cv::Point2i> square;
-        square.push_back(getPoint(cv::Point2f(sp.x - 7.5, sp.y - 7.5)));
-        square.push_back(getPoint(cv::Point2f(sp.x + 7.5, sp.y - 7.5)));
-        square.push_back(getPoint(cv::Point2f(sp.x + 7.5, sp.y + 7.5)));
-        square.push_back(getPoint(cv::Point2f(sp.x - 7.5, sp.y + 7.5)));
-        objectiveImPos[i] = square;
-    }
-
 #ifdef MEMORY_DEBUG
     std::cerr << "End calibration init...\n\nStart step processing..." << std::endl;
 #endif
@@ -1086,6 +1005,7 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
     uint j_cur = 0, n_objectives = sequence.size();
     int cur_objective = sequence[0].mark_correct;
 
+    // This for shall be removed, doesnt do anything for the new version
     for (uint i = 1; i <= maxFrame; ++i)
     {
         frame = frame_it->first;
@@ -1134,7 +1054,7 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
     std::cout << "Max frame: " << frame << std::endl;
 #endif
 
-    std::string out = buildFinalOutputFinal(ft, sequence, maxFrame);
+    std::string out = buildFinalOutputFinal(sequence, maxFrame);
 
 #ifdef SHOW_FINAL_RESULTS
     std::cout << "============ OUT ============ \n" << out << std::endl;
