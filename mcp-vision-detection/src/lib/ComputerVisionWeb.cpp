@@ -13,6 +13,16 @@ namespace
     }
 }
 
+cv::Point2f ComputerVisionWeb::imageToScene(cv::Point2i p) {
+    cv::Mat pin(3, 1, CV_64FC1);
+    pin.at<double>(0,0) = p.x*this->calib_w/this->real_w;
+    pin.at<double>(1,0) = p.y*this->calib_h/this->real_h;
+    pin.at<double>(2,0) = 1;
+    cv::Mat pout = this->H*pin;
+    return cv::Point2f(pout.at<double>(0,0)/pout.at<double>(2,0),
+                       pout.at<double>(1,0)/pout.at<double>(2,0));
+}
+
 size_t writeData(void *ptr, size_t size, size_t nmemb, FILE *stream)
 {
     size_t written = fwrite(ptr, size, nmemb, stream);
@@ -127,18 +137,37 @@ std::string toJSON(const std::vector<Section>& sections) {
     return json;
 }
 
-// Per frame: Two feet. By foot: (x y w h code xp yp d)
-//  (x,y,w,h): foot rect                (left_step, right_step)
-//  code:                               (in_objective1, in_objective2)
-//      0: No step
-//    1-9: Step to nearest objective
-//  (xp,yp): Feet contact point         (left_foot, right_foot)
-//  d: distance to nearest center       (odist1, odist2)
-std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> sequence, int maxFrame) { 
-    //Get central stimulus central position
+cv::Mat recalibrateHomography() {
+    std::vector<cv::Point2f> scenePoints;
+    //The nine scene points
+    scenePoints.resize(9);
+    cv::Point2f p;
+    p.x = 141.421356237; p.y = 141.421356237;
+    scenePoints[0] = p; //Position 1
+    p.x =    0; p.y = 200;
+    scenePoints[1] = p; //Position 2
+    p.x =  -141.421356237; p.y = 141.421356237;
+    scenePoints[2] = p; //Position 3
+    p.x = 200; p.y = 0;
+    scenePoints[3] = p; //Position 4
+    p.x =    0; p.y = 0;
+    scenePoints[4] = p; //Position 5
+    p.x =  -200; p.y = 0;
+    scenePoints[5] = p; //Position 6
+    p.x = 141.421356237; p.y = -141.421356237;
+    scenePoints[6] = p; //Position 7
+    p.x =    0; p.y = -200;
+    scenePoints[7] = p; //Position 8
+    p.x =  -141.421356237; p.y = -141.421356237;
+    scenePoints[8] = p; //Position 9
+    
+    //Using same parameters as in calibration phase:
+    return cv::findHomography(scenePoints, cv::RANSAC, 5);
+}
 
-    //cv::Point2f pcentral = ft.contourCentersScene[4];
-    cv::Point2f pcentral = contourCenters[4]
+std::string ComputerVisionWeb::buildOutput(std::vector<MarkAndTime> sequence, int maxFrame) { 
+    //Get central stimulus central position
+    cv::Point2f pcentral = contourCenters[4];
 
     const int relevant_change = 10; //Number of centimeters for considering relevant change in position
     const int static_step = 15; //Number of frames for considering that step is not displacing
@@ -174,10 +203,8 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
         bool step_center = true, step_objective = true, right_objective = true; 
         
         //Advance until both are near the 5 zone (assume that the player can be late):
-
-
         for (i = current_seq; i < maxFrame; ++i)
-            if(ft.in_objective1[i] == 5 || ft.in_objective2[i] == 5)
+            if(in_objective1[i] == 5 || in_objective2[i] == 5)
                 break;
 #ifdef SHOW_DEBUG_TEXT
         std::cout << "\tCurrent sequence start - prev cur_frame: " << current_seq << std::endl;
@@ -197,19 +224,19 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
 
         //Search for left exit:
         for (i = current_seq; i < maxFrame; ++i) {
-            if(ft.left_step[i] == 0) //Continue until a step is detected
+            if(left_step[i] == 0) //Continue until a step is detected
                 continue;
 #ifdef SHOW_DEBUG_TEXT
         std::cout << "\tCurrent frame - search left position exit: " << i << std::endl;
 #endif        
             //Left foot steps out:
-            if(ft.in_objective1[i] != 5) {
+            if(in_objective1[i] != 5) {
 #ifdef SHOW_DEBUG_TEXT
         std::cout << "\tExit frame left - position exit: " << i << std::endl;
-        std::cout << "\tExit frame left - code found: " << ft.in_objective1[i] << std::endl;
+        std::cout << "\tExit frame left - code found: " << in_objective1[i] << std::endl;
 #endif        
                 current_center_exit1 = i;
-                p_out1 = ft.left_foot[i];
+                p_out1 = left_foot[i];
                 sure_frame1 = i;
                 step_out_detected1 = true;
                 break;
@@ -218,19 +245,19 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
 
         //Search for right exit:
         for (i = current_seq; i < maxFrame; ++i) {
-            if(ft.right_step[i] == 0) //Continue until a step is detected
+            if(right_step[i] == 0) //Continue until a step is detected
                 continue;
 #ifdef SHOW_DEBUG_TEXT
         std::cout << "\tCurrent frame - search right position exit: " << i << std::endl;
 #endif        
             //Right foot steps out:
-            if(ft.in_objective2[i] != 5) {
+            if(in_objective2[i] != 5) {
 #ifdef SHOW_DEBUG_TEXT
         std::cout << "\tExit frame right - position exit: " << i << std::endl;
-        std::cout << "\tExit frame right - code found: " << ft.in_objective2[i] << std::endl;
+        std::cout << "\tExit frame right - code found: " << in_objective2[i] << std::endl;
 #endif        
                 current_center_exit2 = i;
-                p_out2 = ft.right_foot[i];
+                p_out2 = right_foot[i];
                 sure_frame2 = i;
                 step_out_detected2 = true;
                 break;
@@ -254,7 +281,7 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
             
             int lindex_1, lindex_2, rindex_1, rindex_2, il_found, ir_found, il_last = current_seq+1, ir_last = current_seq+1, il_initial, il_last_stepping, ir_initial, ir_last_stepping;
             bool stepping = false, first = true, pl_found = false, pr_found = false;
-            cv::Point2f p1, p2, p_out_s = ft.imageToScene(p_out1), p_center = ft.contourCentersScene[4]; //Take central point as reference
+            cv::Point2f p1, p2, p_out_s = imageToScene(p_out1), p_center = contourCentersScene[4]; //Take central point as reference
             float d1, d2, d, 
                   d_center_obj = sqrt((p_out_s.x - p_center.x)*(p_out_s.x - p_center.x) + (p_out_s.y - p_center.y)*(p_out_s.y - p_center.y));
 #ifdef SHOW_DEBUG_TEXT
@@ -269,7 +296,7 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
                 std::cout << "\tTake-off - left - frame: " << i << std::endl;
 #endif                        
                 if(first) { //Search for end of first stepping
-                    if(!stepping && ft.left_step[i] == 1) { //A step
+                    if(!stepping && left_step[i] == 1) { //A step
 #ifdef SHOW_DEBUG_TEXT
                         std::cout << "\tTake-off - left - start stepping... " << std::endl;
 #endif                        
@@ -277,7 +304,7 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
                         il_last = i;
                         il_initial = i;
                         lindex_1 = i;
-                    } else if(stepping && ft.left_step[i] == 0) { //Is stepping, so check if it stops doing so
+                    } else if(stepping && left_step[i] == 0) { //Is stepping, so check if it stops doing so
 #ifdef SHOW_DEBUG_TEXT
                         std::cout << "\tTake-off - left - stop stepping... " << std::endl;
 #endif                  
@@ -286,15 +313,15 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
                         first = false; //First index ready
                     }
                 } else { //Search for first of following step
-                    if(ft.left_step[i] == 1) { //First position of next step
+                    if(left_step[i] == 1) { //First position of next step
 #ifdef SHOW_DEBUG_TEXT
                         std::cout << "\tTake-off - left - left following found... " << std::endl;
 #endif        
                         il_last = i;
                         lindex_2 = i;
                         //Significant displacement criterion
-                        p1 = ft.imageToScene(ft.left_foot[lindex_1]);
-                        p2 = ft.imageToScene(ft.left_foot[lindex_2]);
+                        p1 = imageToScene(left_foot[lindex_1]);
+                        p2 = imageToScene(left_foot[lindex_2]);
                         d  = sqrt((p2.x - p1.x)*(p2.x - p1.x) + (p2.y - p1.y)*(p2.y - p1.y));
                         //d1 = sqrt((p_out_s.x - p1.x)*(p_out_s.x - p1.x) + (p_out_s.y - p1.y)*(p_out_s.y - p1.y));//L2 norm
                         //d2 = sqrt((p_out_s.x - p2.x)*(p_out_s.x - p2.x) + (p_out_s.y - p2.y)*(p_out_s.y - p2.y));//L2 norm
@@ -311,7 +338,7 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
                         std::cout << "\tTake-off - left - projected distance between 2nd step and objective: " << d2 << std::endl;
                         std::cout << "\tTake-off - left - distance between center and objective: " << d_center_obj << std::endl;
 #endif
-                        if(d1 < d2 && d > relevant_change && il_initial - il_last_stepping < static_step && d2 < d_center_obj && ft.odist1[i] != 0) { //While the step is approaching to the objective and not farther than center, keep searching...
+                        if(d1 < d2 && d > relevant_change && il_initial - il_last_stepping < static_step && d2 < d_center_obj && odist1[i] != 0) { //While the step is approaching to the objective and not farther than center, keep searching...
 #ifdef SHOW_DEBUG_TEXT
                             std::cout << "\tTake-off - left - keeps approaching objective... " << std::endl;
 #endif
@@ -375,7 +402,7 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
             //Now check first relevant change in right step
             stepping = false; 
             first = true;
-            p_out_s = ft.imageToScene(p_out2);
+            p_out_s = imageToScene(p_out2);
             d_center_obj = sqrt((p_out_s.x - p_center.x)*(p_out_s.x - p_center.x) + (p_out_s.y - p_center.y)*(p_out_s.y - p_center.y));
 #ifdef SHOW_DEBUG_TEXT
             std::cout << "\tProcessing take-off right..." << std::endl;
@@ -387,7 +414,7 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
                 std::cout << "\tTake-off - right - frame: " << i << std::endl;
 #endif                        
                 if(first) { //Search for end of first stepping
-                    if(!stepping && ft.right_step[i] == 1) { //A step
+                    if(!stepping && right_step[i] == 1) { //A step
 #ifdef SHOW_DEBUG_TEXT
                         std::cout << "\tTake-off - right - start stepping... " << std::endl;
 #endif                        
@@ -395,7 +422,7 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
                         ir_last = i;
                         ir_initial = i;
                         rindex_1 = i;
-                    } else if(stepping && ft.right_step[i] == 0) { //Is stepping, so check if it stops doing so
+                    } else if(stepping && right_step[i] == 0) { //Is stepping, so check if it stops doing so
 #ifdef SHOW_DEBUG_TEXT
                         std::cout << "\tTake-off - right - stop stepping... " << std::endl;
 #endif                  
@@ -404,15 +431,15 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
                         first = false; //First index ready
                     }
                 } else { //Search for first of following step
-                    if(ft.right_step[i] == 1) { //First position of next step
+                    if(right_step[i] == 1) { //First position of next step
 #ifdef SHOW_DEBUG_TEXT
                         std::cout << "\tTake-off - right - right following found... " << std::endl;
 #endif        
                         ir_last = i;
                         rindex_2 = i;
                         //Significant displacement criterion
-                        p1 = ft.imageToScene(ft.right_foot[rindex_1]);
-                        p2 = ft.imageToScene(ft.right_foot[rindex_2]);
+                        p1 = imageToScene(right_foot[rindex_1]);
+                        p2 = imageToScene(right_foot[rindex_2]);
                         d  = sqrt((p2.x - p1.x)*(p2.x - p1.x) + (p2.y - p1.y)*(p2.y - p1.y));
 //                        d1 = sqrt((p_out_s.x - p1.x)*(p_out_s.x - p1.x) + (p_out_s.y - p1.y)*(p_out_s.y - p1.y));//L2 norm
 //                        d2 = sqrt((p_out_s.x - p2.x)*(p_out_s.x - p2.x) + (p_out_s.y - p2.y)*(p_out_s.y - p2.y));//L2 norm
@@ -429,7 +456,7 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
                         std::cout << "\tTake-off - right - projected distance between 2nd step and objective: " << d2 << std::endl;
                         std::cout << "\tTake-off - right - distance between center and objective: " << d_center_obj << std::endl;
 #endif
-                        if(d1 < d2 && d > relevant_change && ir_initial - ir_last_stepping < static_step && d2 < d_center_obj  && ft.odist2[i] != 0) { //While the step is approaching to the objective and not farther than center, keep searching...
+                        if(d1 < d2 && d > relevant_change && ir_initial - ir_last_stepping < static_step && d2 < d_center_obj  && odist2[i] != 0) { //While the step is approaching to the objective and not farther than center, keep searching...
 #ifdef SHOW_DEBUG_TEXT
                             std::cout << "\tTake-off - right - keeps approaching objective... " << std::endl;
 #endif
@@ -492,8 +519,8 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
             if(pl_found && pr_found) {
                 if(il_found < ir_found) { //Take-off is from left
                     cur_item.code = 5;
-                    cur_item.d_l = ft.odist1[il_found];
-                    cur_item.d_r = ft.odist2[ir_found];
+                    cur_item.d_l = odist1[il_found];
+                    cur_item.d_r = odist2[ir_found];
                     cur_item.step_l = true;
                     cur_item.step_r = false;
                     cur_item.frame = il_found;
@@ -504,8 +531,8 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
 #endif
                 } else {
                     cur_item.code = 5;
-                    cur_item.d_l = ft.odist1[il_found];
-                    cur_item.d_r = ft.odist2[ir_found];
+                    cur_item.d_l = odist1[il_found];
+                    cur_item.d_r = odist2[ir_found];
                     cur_item.step_l = false;
                     cur_item.step_r = true;
                     cur_item.frame = ir_found;                    
@@ -517,8 +544,8 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
                 }
             } else if(pl_found) {
                 cur_item.code = 5;
-                cur_item.d_l = ft.odist1[il_found];
-                cur_item.d_r = ft.odist2[il_last];
+                cur_item.d_l = odist1[il_found];
+                cur_item.d_r = odist2[il_last];
                 cur_item.step_l = true;
                 cur_item.step_r = false;
                 cur_item.frame = il_found;
@@ -529,8 +556,8 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
 #endif
             } else if (pr_found) {
                 cur_item.code = 5;
-                cur_item.d_l = ft.odist1[il_found];
-                cur_item.d_r = ft.odist2[ir_found];
+                cur_item.d_l = odist1[il_found];
+                cur_item.d_r = odist2[ir_found];
                 cur_item.step_l = false;
                 cur_item.step_r = true;
                 cur_item.frame = ir_found;                                    
@@ -541,8 +568,8 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
 #endif
             } else { //if none, use max
                 cur_item.code = 5;
-                cur_item.d_l = ft.odist1[il_found];
-                cur_item.d_r = ft.odist2[ir_found];
+                cur_item.d_l = odist1[il_found];
+                cur_item.d_r = odist2[ir_found];
                 cur_item.step_l = il_found;
                 cur_item.step_r = ir_found;
                 cur_item.frame = il_found<ir_found? il_found : ir_found;                                    
@@ -576,20 +603,20 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
             std::cout << "\tArrival - frame: " << i << std::endl;
 #endif            
             //There might still be one of the feet near center
-            if(ft.in_objective1[i] != 5) {
+            if(in_objective1[i] != 5) {
 #ifdef SHOW_DEBUG_TEXT
                 std::cout << "\tArrival - check left far center... " << std::endl;
 #endif            
                 still_near_center_l = false;
-                if(ft.left_step[i] == 1) { 
+                if(left_step[i] == 1) { 
 #ifdef SHOW_DEBUG_TEXT
-                    std::cout << "\tArrival - check left far center step - code: " << ft.in_objective1[i] << std::endl;
-                    std::cout << "\tArrival - check left far center step - distance: " << ft.odist1[i] << std::endl;
+                    std::cout << "\tArrival - check left far center step - code: " << in_objective1[i] << std::endl;
+                    std::cout << "\tArrival - check left far center step - distance: " << odist1[i] << std::endl;
                     std::cout << "\tArrival - check left far center step - last_real: " << last_real << std::endl;
 #endif            
-                    if(ft.odist1[i]==0 && last_real != ft.in_objective1[i]) { //Registers the first arrival with this code
+                    if(odist1[i]==0 && last_real != in_objective1[i]) { //Registers the first arrival with this code
                         last_arrival_frame = i;
-                        last_real = nearest_arrival_code = ft.in_objective1[i];
+                        last_real = nearest_arrival_code = in_objective1[i];
                         nearest_arrival_distance = 0;
                         real_arrival = true;
                         is_left = true;
@@ -597,10 +624,10 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
                 std::cout << "\tArrival - left real arrival found at: " << i << std::endl;
 #endif            
                     } 
-                    if(!real_arrival && ft.odist1[i] < nearest_arrival_distance) {
-                        nearest_arrival_distance = ft.odist1[i];
+                    if(!real_arrival && odist1[i] < nearest_arrival_distance) {
+                        nearest_arrival_distance = odist1[i];
                         last_arrival_frame = i;
-                        nearest_arrival_code = ft.in_objective1[i];
+                        nearest_arrival_code = in_objective1[i];
                         is_left = true;
 #ifdef SHOW_DEBUG_TEXT
                 std::cout << "\tArrival - left near arrival found at: " << i << std::endl;
@@ -609,20 +636,20 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
                     }
                 }
             }
-            if(ft.in_objective2[i] != 5) {
+            if(in_objective2[i] != 5) {
 #ifdef SHOW_DEBUG_TEXT
                 std::cout << "\tArrival - check right far center... " << std::endl;
 #endif            
                 still_near_center_r = false;
-                if(ft.right_step[i] == 1) { 
+                if(right_step[i] == 1) { 
 #ifdef SHOW_DEBUG_TEXT
-                    std::cout << "\tArrival - check right far center step - code: " << ft.in_objective2[i] << std::endl;
-                    std::cout << "\tArrival - check right far center step - distance: " << ft.odist2[i] << std::endl;
+                    std::cout << "\tArrival - check right far center step - code: " << in_objective2[i] << std::endl;
+                    std::cout << "\tArrival - check right far center step - distance: " << odist2[i] << std::endl;
                     std::cout << "\tArrival - check right far center step - last_real: " << last_real << std::endl;
 #endif            
-                    if(ft.odist2[i]==0 && last_real != ft.in_objective2[i]) { //Registers the first arrival with this code
+                    if(odist2[i]==0 && last_real != in_objective2[i]) { //Registers the first arrival with this code
                         last_arrival_frame = i;
-                        last_real = nearest_arrival_code = ft.in_objective2[i];
+                        last_real = nearest_arrival_code = in_objective2[i];
                         nearest_arrival_distance = 0;
                         real_arrival = true;
                         is_left = false;
@@ -630,10 +657,10 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
                         std::cout << "\tArrival - right real arrival found at: " << i << std::endl;
 #endif            
                     } 
-                    if(!real_arrival && ft.odist2[i] < nearest_arrival_distance) {
-                        nearest_arrival_distance = ft.odist2[i];
+                    if(!real_arrival && odist2[i] < nearest_arrival_distance) {
+                        nearest_arrival_distance = odist2[i];
                         last_arrival_frame = i;
-                        nearest_arrival_code = ft.in_objective2[i];
+                        nearest_arrival_code = in_objective2[i];
                         is_left = false;
 #ifdef SHOW_DEBUG_TEXT
                         std::cout << "\tArrival - right near arrival found at: " << i << std::endl;
@@ -644,7 +671,7 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
 
             }
             
-            if(!still_near_center_l && ft.in_objective1[i] == 5 && ft.left_step[i] == 1) { //First step returning to center
+            if(!still_near_center_l && in_objective1[i] == 5 && left_step[i] == 1) { //First step returning to center
 #ifdef SHOW_DEBUG_TEXT
                 std::cout << "\tArrival - left step returning to center found at: " << i << std::endl;
 #endif            
@@ -652,7 +679,7 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
                 next_seq = i;
                 break;
             }
-            if(!still_near_center_r && ft.in_objective2[i] == 5 && ft.right_step[i] == 1) { //First step returning to center
+            if(!still_near_center_r && in_objective2[i] == 5 && right_step[i] == 1) { //First step returning to center
 #ifdef SHOW_DEBUG_TEXT
                 std::cout << "\tArrival - right step returning to center found at: " << i << std::endl;
 #endif            
@@ -670,8 +697,8 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
                 step_objective = false; 
         }
         cur_item.code = nearest_arrival_code;
-        cur_item.d_l = ft.odist1[last_arrival_frame];
-        cur_item.d_r = ft.odist2[last_arrival_frame];
+        cur_item.d_l = odist1[last_arrival_frame];
+        cur_item.d_r = odist2[last_arrival_frame];
         cur_item.step_l = is_left? 1:0;
         cur_item.step_r = is_left? 0:1;
         cur_item.frame = last_arrival_frame;
@@ -683,9 +710,9 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
         std::cout << "\tArrival - arrival frame: " << cur_section.arrival_frame << std::endl;
         std::cout << "\tArrival - arrival code: " << cur_section.arrival_code << std::endl;
         if(is_left)
-            std::cout << "\tArrival - arrival distance: " << ft.odist1[last_arrival_frame] << std::endl;
+            std::cout << "\tArrival - arrival distance: " << odist1[last_arrival_frame] << std::endl;
         else
-            std::cout << "\tArrival - arrival distance: " << ft.odist2[last_arrival_frame] << std::endl;
+            std::cout << "\tArrival - arrival distance: " << odist2[last_arrival_frame] << std::endl;
 #endif            
 
         
@@ -697,9 +724,9 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
             std::cout << "\tReturn to center - frame: " << i << std::endl;
 #endif            
             //There might still be one of the feet near center
-            if(ft.in_objective1[i] == 5) {
+            if(in_objective1[i] == 5) {
                 still_far_center_l = false;
-                if(ft.left_step[i] == 1) {
+                if(left_step[i] == 1) {
 #ifdef SHOW_DEBUG_TEXT
             std::cout << "\tReturn to center - found left at: " << i << std::endl;
 #endif            
@@ -707,9 +734,9 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
                     break;
                 }
             }
-            if(ft.in_objective2[i] == 5) {
+            if(in_objective2[i] == 5) {
                 still_far_center_r = false;
-                if(ft.right_step[i] == 1) {
+                if(right_step[i] == 1) {
 #ifdef SHOW_DEBUG_TEXT
                     std::cout << "\tReturn to center - found right at: " << i << std::endl;
 #endif            
@@ -718,10 +745,10 @@ std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> se
                 }
             }
             
-            if(!still_far_center_l && ft.in_objective1[i] != 5)
+            if(!still_far_center_l && in_objective1[i] != 5)
                 ready_l = true;
                 
-            if(!still_far_center_r && ft.in_objective2[i] != 5)
+            if(!still_far_center_r && in_objective2[i] != 5)
                 ready_r = true;
             
             if(ready_l && ready_r) {
@@ -876,9 +903,8 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
     std::string urlVideo = "/usr/src/app/mcp-vision-detection/video.mp4";
     std::string urlBG = "/usr/src/app/mcp-vision-detection/bg.jpg";
 
-    int real_w, real_h;
-    int calib_w = std::stoi(string_calib_w);
-    int calib_h = std::stoi(string_calib_h);
+    calib_w = std::stoi(string_calib_w);
+    calib_h = std::stoi(string_calib_h);
 
 
     cv::VideoCapture vtest;
@@ -895,21 +921,10 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
         return "Error al abrir video";
     }
 
-    // std::cout << "Contornos:\n";
-    // for (const auto& contorno : contornos) {
-    //     std::cout << "Contorno - X: " << contorno.x << ", Y: " << contorno.y << ", Z: " << contorno.z << ", indiceContorno: " << contorno.indiceContorno << "\n";
-    //     std::cout << "Puntos:";
-    //     for (const auto& punto : contorno.points) {
-    //         std::cout << " (" << punto.x << ", " << punto.y << ")";
-    //     }
-    //     std::cout << std::endl;
-    // }
-
     std::cout << "Sequence:\n";
     for (const auto& markTime : sequence) {
         std::cout << "Mark: " << markTime.mark_correct << ", Time: " << markTime.frame << std::endl;
     }
-
 
     std::cout << "URL del video procesado: " << videoUrl << std::endl;
     std::cout << "URL de la imagen de fondo procesada: " << imageUrl << std::endl;
@@ -997,6 +1012,29 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
         contourCenters.push_back(cv::Point2f(xx/n, yy/n));
     }
 
+    //Recalculate homography image --> scene with contour centers
+    H = recalibrateHomography();
+
+    //Get proyected contours:
+    for (const auto &c : contornos) {
+        Contour contorno;
+        contorno.indiceContorno = c.indiceContorno;
+        contorno.x = c.x;
+        contorno.y = c.y;
+        contorno.z = c.z;
+        for (const auto &p : c.points) 
+            contorno.points.push_back(imageToScene(p));
+        contoursScene.push_back(contorno); 
+    }
+    
+    std::cout << "Recalibration: " << std::endl;
+    for(int i=0 ; i< contourCenters.size() ; ++i) {
+        cv::Point2f p = imageToScene(contourCenters[i]);
+        std::cout << "\tObjective " << i+1 << ": " << p.x << ", " << p.y << std::endl; 
+        contourCentersScene.push_back(p);
+    }
+
+
 #ifdef MEMORY_DEBUG
     std::cerr << "End calibration init...\n\nStart step processing..." << std::endl;
 #endif
@@ -1053,7 +1091,7 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
     std::cout << "Max frame: " << frame << std::endl;
 #endif
 
-    std::string out = buildFinalOutputFinal(sequence, maxFrame);
+    std::string out = buildOutput(sequence, maxFrame);
 
 #ifdef SHOW_FINAL_RESULTS
     std::cout << "============ OUT ============ \n" << out << std::endl;
