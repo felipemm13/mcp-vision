@@ -136,8 +136,10 @@ std::string toJSON(const std::vector<Section>& sections) {
 //  d: distance to nearest center       (odist1, odist2)
 std::string ComputerVisionWeb::buildFinalOutputFinal(std::vector<MarkAndTime> sequence, int maxFrame) { 
     //Get central stimulus central position
-    cv::Point2f pcentral = ft.contourCentersScene[4];
-    
+
+    //cv::Point2f pcentral = ft.contourCentersScene[4];
+    cv::Point2f pcentral = contourCenters[4]
+
     const int relevant_change = 10; //Number of centimeters for considering relevant change in position
     const int static_step = 15; //Number of frames for considering that step is not displacing
     
@@ -849,8 +851,6 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
     std::string string_calib_w = std::to_string(root["response"]["calib_w"].asInt());
     std::string string_calib_h = std::to_string(root["response"]["calib_h"].asInt());
     
-    std::vector<Contour> contornos;
-
     for (const auto &item : root["response"]["points"])
     {
         Contour contorno;
@@ -982,7 +982,6 @@ std::string ComputerVisionWeb::mainFunction(std::string contourjson, std::string
         return "El video no abrio la segunda vez!!";
     }
     
-    std::vector<cv::Point2f> contourCenters;
     float xx,yy;
     int n;
   
