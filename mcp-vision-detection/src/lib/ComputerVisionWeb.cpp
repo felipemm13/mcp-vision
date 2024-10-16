@@ -132,7 +132,8 @@ string toJSON(const vector<Section>& sections) {
     }
     json2 += "]";
 
-    cout << "JSON NUEVO \n\n" << json2 << endl;
+    cout << "====================================\n" << json2 << endl;
+    cout << "====================================\n" << endl;
 
     return json;
 }
@@ -182,6 +183,15 @@ float ComputerVisionWeb::distance(cv::Point2f &p1, cv::Point2f &p2)
     return sqrt(dx * dx + dy * dy);
 }
 
+// Function to create a vector of points simulating a polygon from Position
+vector<cv::Point2i> makePolygon(const Position& pos) {
+    vector<cv::Point2i> polygon;
+    polygon.push_back(pos.heel);
+    polygon.push_back(pos.foot_index);
+    polygon.push_back(pos.ankle);
+    return polygon;
+}
+
 void ComputerVisionWeb::processAvailableStepsWithCoverageArea(int index, int cur_objective)
 {
     int pos_correction = frames_to_store / 2 + 3;
@@ -195,30 +205,19 @@ void ComputerVisionWeb::processAvailableStepsWithCoverageArea(int index, int cur
 }
 
 void ComputerVisionWeb::processStepsWithCoverageArea(int index, int frame, int cur_objective){
-    // smoothDisplacement(index); Esto ya esta considerado en el algoritmo de pasos
+    // smoothDisplacement(index); // This is not longer useful on the IA implementation
     // smoothBBoxes(index); Ya no hay BBoxes
-    // TODO , left y right son los rectangulos de los pies, hay que generar el poligono de los pies y empezar
-    // a usar estos en vez de las cajas, una vez con esto podemos ya seguir a las intersecciones
     // cv::Rect &left = left_rects_s[index], &right = right_rects_s[index];
 
-    // Aca determinamos si el paso es valido o no, esto ya esta en la información del nuevo alg
-    if (frames_info[index].stepDetection){
-        if (frames_info[index].stepSide == "Both") {
-            right_step[index] = 1;
-            left_step[index] = 1;
+    // Store the polygons of the frame
+    vector<cv::Point2i> &left = left_feet[index];
+    vector<cv::Point2i> &right = right_feet[index];
 
-        } else if (frames_info[index].stepSide == "Right") {
-            right_step[index] = 1;
-
-        } else if (frames_info[index].stepSide == "Left") {
-            left_step[index] = 1;
-        }
-    }
-    // if (leftStepCriteria(index)) { left_step[index] = 1; }
-    // if (rightStepCriteria(index)){ right_step[index] = 1; }
+    bool leftStepOccurred = left_step[index];
+    bool rightStepOccurred = right_step[index];
 
     cv::Mat cur_copy2;
-    int index_contour = intersectsObjective(cur_copy2, index, frame, left, left_step[index], right, right_step[index]);
+    int index_contour = intersectsObjective(cur_copy2, index, frame, left, leftStepOccurred, right, rightStepOccurred);
 
 #ifdef SHOW_FINAL_RESULTS
     cout << "Processed step index: " << index << endl;
@@ -237,71 +236,19 @@ void ComputerVisionWeb::processStepsWithCoverageArea(int index, int frame, int c
         cv::Point2f p = transformInv(right_foot[index]);
         cout << "Right foot position:" << p.x << ", " << p.y << endl;
     }
-
-    int fontFace = cv::FONT_HERSHEY_SIMPLEX;
-    double fontScale = 0.8;
-    int thickness = 2;
-
-    sframes[frame].copyTo(cur_copy2);
-    if (left_step[index]) {
-        cv::rectangle(cur_copy2, left, cv::Scalar(0, 255, 0));
-        string text = "L";
-        cv::putText(cur_copy2, text, cv::Point(left.x+1,left.y + left.height - 3), fontFace, fontScale, cv::Scalar(255, 255, 255),              thickness);
-    } else
-        cv::rectangle(cur_copy2, left, cv::Scalar(0, 0, 255)); // Left
-    if (right_step[index]) {
-        cv::rectangle(cur_copy2, right, cv::Scalar(0, 255, 0));
-        string text = "R";
-        cv::putText(cur_copy2, text, cv::Point(right.x+1,right.y + right.height - 3), fontFace, fontScale, cv::Scalar(255, 255, 255), thickness);
-    } else
-        cv::rectangle(cur_copy2, right, cv::Scalar(0, 0, 255)); // Right
-
-    drawObjectives(cur_copy2 , index_contour+1, cur_objective);
-
-    fontScale = 0.5;
-    for(int i=0; i<contourCenters.size(); ++i) {
-        string text = to_string(i+1);
-        cv::Point2f &p = contourCenters[i];
-        //cout << "Objective " << i+1 << ": " << p.x << ", " << p.y << endl; 
-        cv::circle(cur_copy2, cv::Point(rint(p.x), rint(p.y)), 2, cv::Scalar(255, 255, 0));
-        cv::putText(cur_copy2, text, cv::Point(rint(p.x)+5, rint(p.y)), fontFace, fontScale, cv::Scalar(255, 255, 0),              thickness);
-    }
-    
-    if (left_step[index])
-        cv::circle(cur_copy2, left_foot[index], 3, cv::Scalar(0, 255, 255));
-
-    if (right_step[index])
-        cv::circle(cur_copy2, right_foot[index], 3, cv::Scalar(0, 255, 255));
-    // cv::resize(cur_copy2, cur_copy2, cv::Size(4*cur_copy2.cols, 4*cur_copy2.rows));
-    fontScale = 1.0;
-    string text = "Frame: " + to_string(frame) + "  Index: " + to_string(index);
-    cv::putText(cur_copy2, text, cv::Point(10,30), fontFace, fontScale, cv::Scalar(0, 255, 0), thickness);
-
-    cv::namedWindow("Everything", cv::WINDOW_NORMAL);
-    cv::resizeWindow("Everything", 1920, 1000);
-    cv::imshow("Everything", cur_copy2);
-    cv::waitKey(0);
-    saveResult(cur_copy2, frame);
 #endif
 }
 
-int ComputerVisionWeb::intersectsObjective(cv::Mat &img, int index, int frame, cv::Rect &leftStep, bool leftStepOccurred, cv::Rect &rightStep, bool rightStepOccurred){
-    auto minSceneDistanceToRectContour = [&](const cv::Rect &stepRect, const vector<cv::Point2f> &scene_contour) -> float{
-        vector<cv::Point2f> rectPoints = {
-            imageToScene(cv::Point2f(stepRect.tl())),
-            imageToScene(cv::Point2f(stepRect.br().x, stepRect.tl().y)),
-            imageToScene(cv::Point2f(stepRect.br())),
-            imageToScene(cv::Point2f(stepRect.tl().x, stepRect.br().y))};
-
+int ComputerVisionWeb::intersectsObjective(cv::Mat &img, int index, int frame, vector<cv::Point2i> &leftStep, bool leftStepOccurred, vector<cv::Point2i> &rightStep, bool rightStepOccurred){
+    // Function to search the minimum distance between a polygon and a contour
+    auto minSceneDistanceToRectContour = [&](const vector<cv::Point2i> &stepPolygon, const vector<cv::Point2f> &scene_contour) -> float{
         float minDistance = FLT_MAX;
-        for (const auto &rectPoint : rectPoints)
-        {
-            for (int i = 0; i < scene_contour.size(); i++)
-            {
-                float distance = calculatePointToLineDistance(scene_contour[i], scene_contour[(i + 1) % scene_contour.size()], rectPoint);
+        for (const auto &polygonPoint : stepPolygon) {
+            cv::Point2f scenePoint = imageToScene(cv::Point2f(polygonPoint));
+            for (int i = 0; i < scene_contour.size(); i++) {
+                float distance = calculatePointToLineDistance(scene_contour[i], scene_contour[(i + 1) % scene_contour.size()], scenePoint);
                 minDistance = min(minDistance, distance);
-            }
-        }
+        }}
         return minDistance;
     };
 
@@ -318,38 +265,34 @@ int ComputerVisionWeb::intersectsObjective(cv::Mat &img, int index, int frame, c
     bool flagIntersect = false;
 
     for (int contourIndex = 0; contourIndex < this->contours.size(); contourIndex++) {
-        
         Contour &contour = this->contours[contourIndex];
         Contour &scene_contour = this->contoursScene[contourIndex];
+
         distance_left = minSceneDistanceToRectContour(leftStep, scene_contour.points);
         if (distance_left < minDistance_left) {
             minDistance_left = distance_left;
             id_minDist_left = contourIndex;
         }
 
-        intersects_left = feetIntersectsObjective(leftStep, contour.ipoints); // FALTA ACA, IMPORTANTE
+        intersects_left = feetIntersectsObjective(leftStep, contour.ipoints);
         this->left_intersects[index] = 0;
 
         if (intersects_left && leftStepOccurred) {
             // Intersection or closeness logic for left step
-            this->odist1[index] = 0; // TODO FALTA ACA
-            
-            // getStepPosition(frame, leftStep); TODO Deberia ser el punto central del pie
-            // this->left_foot[index] = getStepPosition(frame, leftStep);
+            this->odist1[index] = 0;
             this->left_foot[index] = frames_info[index].left_position.center;
-
             this->in_objective1[index] = contourIndex+1;
-
-//            cout << "Intersect left_foot frame: " << frame << " contourIndex: "<< contourIndex <<endl;
+            this->left_intersects[index] = 1;
             flagIntersect = true;
-            this->left_intersects[index] = 1; // FALTA ACA
+
+            // this->left_foot[index] = getStepPosition(frame, leftStep);
+            // cout << "Intersect left_foot frame: " << frame << " contourIndex: "<< contourIndex <<endl;
+
         } else {
             this->odist1[index] = minDistance_left;
             this->in_objective1[index] = id_minDist_left+1;
-
-            // this->left_foot[index] = getStepPosition(frame, leftStep);
             this->left_foot[index] = frames_info[index].left_position.center;
-
+            // this->left_foot[index] = getStepPosition(frame, leftStep);
         }
 
         distance_right = minSceneDistanceToRectContour(rightStep, scene_contour.points);
@@ -360,25 +303,21 @@ int ComputerVisionWeb::intersectsObjective(cv::Mat &img, int index, int frame, c
 
         intersects_right = feetIntersectsObjective(rightStep, contour.ipoints);
         this->right_intersects[index] = 0;
-
         if (intersects_right && rightStepOccurred) {
             // Intersection or closeness logic for right step
             this->odist2[index] = 0;
-
-            // this->right_foot[index] = getStepPosition(frame, rightStep);
             this->right_foot[index] = frames_info[index].right_position.center;
             this->in_objective2[index] = contourIndex+1;
-            
-            // cout << "Intersect right_foot frame: " << frame << " contourIndex: "<< contourIndex <<endl;
-            flagIntersect = true;
             this->right_intersects[index] = 1;
+            flagIntersect = true;
+
+            // this->right_foot[index] = getStepPosition(frame, rightStep);
+            // cout << "Intersect right_foot frame: " << frame << " contourIndex: "<< contourIndex <<endl;
         } else {
             this->odist2[index] = minDistance_right;
             this->in_objective2[index] = id_minDist_right+1;
-
+            this->right_foot[index] = frames_info[index].right_position.center;
             // this->right_foot[index] = getStepPosition(frame, rightStep);
-            this->left_foot[index] = frames_info[index].right_position.center;
-
         }
         if (flagIntersect) {
             return contourIndex;
@@ -399,30 +338,14 @@ float ComputerVisionWeb::calculatePointToLineDistance(const cv::Point2f &pointA,
     return cv::norm(point - projection);
 }
 
-bool ComputerVisionWeb::feetIntersectsObjective(cv::Rect rect, vector<cv::Point2i> &contour) {
-    //Adjust feet if is too tall (assume it can be at most as tall as wide, and that contact zone will be at most at half size of feet box):
-    //1. Feet correction (at most as tall as wide)
-    if(rect.width < rect.height) {
-        rect.y +=  rect.height - rect.width;
-        rect.height = rect.width;
-    }
-    //2. Take the 50% of feet box as contact zone:
-    rect.y += rect.height/2;
-    rect.height /= 2;
-    
-    //Set feet polygon: //TODO HAY QUE PONER LOS PUNTOS DEL PIE AHORA EN VEZ DE EL CUADRADO DEL PIE
-    vector<cv::Point2i> feetPoints = {
-        {rect.x, rect.y},
-        {rect.x + rect.width, rect.y},
-        {rect.x + rect.width, rect.y + rect.height},
-        {rect.x, rect.y + rect.height}
-    };
-    return isPolygonIntersection(feetPoints, contour);
+bool ComputerVisionWeb::feetIntersectsObjective(vector<cv::Point2i> &footPolygon, vector<cv::Point2i> &contour) {
+    return isPolygonIntersection(footPolygon, contour);
 }
 
 string ComputerVisionWeb::buildOutput(vector<MarkAndTime> sequence, int maxFrame) { 
     //Get central stimulus central position
     cv::Point2f pcentral = contourCenters[4];
+    cout << "Central position: " << pcentral.x << ", " << pcentral.y << endl;
 
     const int relevant_change = 10; //Number of centimeters for considering relevant change in position
     const int static_step = 15; //Number of frames for considering that step is not displacing
@@ -441,8 +364,6 @@ string ComputerVisionWeb::buildOutput(vector<MarkAndTime> sequence, int maxFrame
     vector<Section> sequences;
     bool first_stimulus = true;
     
-    cout << "\n TEST 1 \n" << endl;
-
     //Get intervals per objective:
     for (int j = 0; j < n_objectives; ++j) {
         Section cur_section;
@@ -460,6 +381,7 @@ string ComputerVisionWeb::buildOutput(vector<MarkAndTime> sequence, int maxFrame
         bool step_center = true, step_objective = true, right_objective = true; 
         
         //Advance until both are near the 5 zone (assume that the player can be late):
+        // TODO in_objective1 
         for (i = current_seq; i < maxFrame; ++i)
             if(in_objective1[i] == 5 || in_objective2[i] == 5)
                 break;
@@ -479,7 +401,6 @@ string ComputerVisionWeb::buildOutput(vector<MarkAndTime> sequence, int maxFrame
         bool step_out_detected1 = false, step_out_detected2 = false;
         int sure_frame1, sure_frame2;
 
-        cout << "\n TEST 2 \n" << endl;
 
         //Search for left exit:
         for (i = current_seq; i < maxFrame; ++i) {
@@ -523,7 +444,6 @@ string ComputerVisionWeb::buildOutput(vector<MarkAndTime> sequence, int maxFrame
             }            
         }
 
-        cout << "\n TEST 3 \n" << endl;
 
         
         if(step_out_detected1 || step_out_detected2) { //It shall be detected... if not maybe end of stimuli sequence or player skip some stimuli
@@ -852,8 +772,6 @@ string ComputerVisionWeb::buildOutput(vector<MarkAndTime> sequence, int maxFrame
             break; //No step out, means irrelevant rest of video
         }
         
-        cout << "\n TEST 4 \n" << endl;
-
         //Search for arrival info
         int last_arrival_frame = -1; //Value is -1 if no one steps, and the corresponding frame if it steps
         int nearest_arrival_code; //Stepping or not, it is the nearest arrival code
@@ -951,8 +869,6 @@ string ComputerVisionWeb::buildOutput(vector<MarkAndTime> sequence, int maxFrame
             
         } 
         
-        cout << "\n TEST 5 \n" << endl;
-
         //Set arrival errors and arrival time
         if(!real_arrival || nearest_arrival_code != cur_objective) {
             if(real_arrival && nearest_arrival_code != cur_objective)
@@ -1208,7 +1124,7 @@ string ComputerVisionWeb::mainFunction(string contourjson, string videoUrl, stri
     cv::Mat bg = cv::imread(urlBG);
 
 #ifdef SHOW_INTERMEDIATE_RESULTS
-    cv::imshow("Background", bg);
+    // cv::imshow("Background", bg);
 #endif
 
 
@@ -1312,6 +1228,29 @@ string ComputerVisionWeb::mainFunction(string contourjson, string videoUrl, stri
     odist2.resize(maxFrame, 0.0);
     left_intersects.resize(maxFrame, 0);
     right_intersects.resize(maxFrame, 0);
+    left_feet.resize(maxFrame);
+    right_feet.resize(maxFrame);
+
+    // Loop through each frame and create polygons
+    for (int index = 0; index < maxFrame; ++index) {
+        left_feet[index] = makePolygon(frames_info[index].left_position);
+        right_feet[index] = makePolygon(frames_info[index].right_position);
+
+        // Save boolean with the result of the step algorithm
+        if (frames_info[index].stepDetection){
+            if (frames_info[index].stepSide == "Both") {
+                right_step[index] = 1;
+                left_step[index] = 1;
+
+            } else if (frames_info[index].stepSide == "Right") {
+                right_step[index] = 1;
+
+            } else if (frames_info[index].stepSide == "Left") {
+                left_step[index] = 1;
+            }
+        }
+    }
+
 
 #ifdef MEMORY_DEBUG
     cerr << "End calibration init...\n\nStart step processing..." << endl;
@@ -1334,10 +1273,10 @@ string ComputerVisionWeb::mainFunction(string contourjson, string videoUrl, stri
 #endif
         vtest >> current;
 #ifdef SHOW_INTERMEDIATE_RESULTS
-        current.copyTo(cur_copy);
-        cv::rectangle(cur_copy, gt_bboxes[frame], cv::Scalar(0, 255, 255), 1);
+        // current.copyTo(cur_copy);
+        // cv::rectangle(cur_copy, gt_bboxes[frame], cv::Scalar(0, 255, 255), 1);
         // cv::resize(cur_copy, cur_copy, cv::Size(3*current.cols,3*current.rows));
-        cv::imshow("Current Image", cur_copy);
+        // cv::imshow("Current Image", cur_copy);
 #endif
         //Get currently active objective
         for (uint j = j_cur; j < n_objectives; ++j) {
@@ -1351,16 +1290,21 @@ string ComputerVisionWeb::mainFunction(string contourjson, string videoUrl, stri
             j_cur = j;
         }
 
-        // cv::Rect player_roi(x1, y1, x2 - x1 + 1, y2 - y1 + 1);
-        // ft.player_roi.push_back(player_roi);
-        // // Set candidates and track them:
-        // ft.setFeetPositionsByBBox(frame, player_roi, result3);
-        // ft.trackPositions(frame, player_roi, result3, current, frame_it->second, i);
-        processAvailableStepsWithCoverageArea(i, cur_objective);
-        
 #ifdef SHOW_INTERMEDIATE_RESULTS
         cout << "Current Objective: " << cur_objective << endl;
-#endif        
+#endif    
+
+        // cv::Rect player_roi(x1, y1, x2 - x1 + 1, y2 - y1 + 1);
+        // ft.player_roi.push_back(player_roi);
+        // Set candidates and track them:
+        // ft.setFeetPositionsByBBox(frame, player_roi, result3);
+        // ft.trackPositions(frame, player_roi, result3, current, frame_it->second, i);
+
+#ifdef SHOW_INTERMEDIATE_RESULTS
+            std::cout << "Frame: " << frame << std::endl;
+#endif
+
+        processAvailableStepsWithCoverageArea(i, cur_objective);    
         frame_it++;
     }
 
@@ -1376,10 +1320,10 @@ string ComputerVisionWeb::mainFunction(string contourjson, string videoUrl, stri
 #endif
 
     string out = buildOutput(sequence, maxFrame);
-    cout << "\n\n OUT: \n" << out << endl;
 
 #ifdef SHOW_FINAL_RESULTS
     cout << "============ OUT ============ \n" << out << endl;
+    cout << "============ END ============ \n" << endl;
 #endif
 
 #ifdef MEMORY_DEBUG

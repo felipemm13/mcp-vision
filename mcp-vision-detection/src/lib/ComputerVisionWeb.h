@@ -1,10 +1,10 @@
 #ifndef MAIN_H
 #define MAIN_H
 
-//#define SHOW_INTERMEDIATE_RESULTS
-//#define SHOW_FINAL_RESULTS
+#define SHOW_INTERMEDIATE_RESULTS
+#define SHOW_FINAL_RESULTS
 
-//#define MEMORY_DEBUG
+#define MEMORY_DEBUG
 
 #include "CommonDefinitions.h"
 #include "ExtendedContour.h"
@@ -34,9 +34,9 @@ public:
 
     void processStepsWithCoverageArea(int index, int frame, int cur_objective);
     void processAvailableStepsWithCoverageArea(int index, int cur_objective);
-    bool feetIntersectsObjective(cv::Rect rect, vector<cv::Point2i> &contour);
+    bool feetIntersectsObjective(vector<cv::Point2i> &footPolygon, vector<cv::Point2i> &contour);
     bool callApi(const string& videoUrl);
-    int intersectsObjective(cv::Mat &img, int index, int frame, cv::Rect &leftStep, bool leftStepOccurred, cv::Rect &rightStep, bool rightStepOccurred);
+    int intersectsObjective(cv::Mat &img, int index, int frame, vector<cv::Point2i> &leftStep, bool leftStepOccurred, vector<cv::Point2i> &rightStep, bool rightStepOccurred);
     float calculatePointToLineDistance(const cv::Point2f &pointA, const cv::Point2f &pointB, const cv::Point2f &point);
     float distance(cv::Point2f &p1, cv::Point2f &p2);
 
@@ -53,18 +53,33 @@ public:
     const float max_cm_to_center = 15;
 
     //Final info to store
+
+    // Think this are useless on the new implementation
     vector<cv::Rect> left_rects_s;
     vector<cv::Rect> right_rects_s;
+    
+    // Center points of each foot
     vector<cv::Point2f> left_foot; //Pixel position
     vector<cv::Point2f> right_foot; //Pixel position
+    
+    // Vectors with the id of the closest objective
     vector<int> in_objective1;
     vector<int> in_objective2;
+    
+    // Vectors with the distance to the closest objective
     vector<float> odist1;
     vector<float> odist2;
+
+    // Vectors with bool if there is an intersection
     vector<int> left_intersects;
     vector<int> right_intersects;
 
-    //Step: 0 is not; 1 is beginning; 2 is still stepping
+    // Vectors to hold polygons for left and right feet LISTO
+    vector<vector<cv::Point2i>> right_feet;
+    vector<vector<cv::Point2i>> left_feet;
+
+
+    //Step: 0 is not; 1 is beginning; 2 is still stepping LISTO
     vector<bool> left_step;
     vector<bool> right_step;
 
