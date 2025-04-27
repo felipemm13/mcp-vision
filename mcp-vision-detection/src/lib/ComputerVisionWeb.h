@@ -52,6 +52,7 @@ public:
                             bool leftStepOccurred,
                             vector<cv::Point2i> &rightStep,
                             bool rightStepOccurred);
+
     float calculatePointToLineDistance(const cv::Point2f &pointA,
                                        const cv::Point2f &pointB,
                                        const cv::Point2f &point);
@@ -106,6 +107,43 @@ public:
     int real_w, real_h;
     int calib_w;
     int calib_h;
+
+private:
+    // =====================================================
+    // Funciones privadas para refactorizar buildOutput
+    // =====================================================
+    int skipUntilFootIsInCenter(int startFrame, int maxFrame);
+
+    void findCenterExit(int startFrame, int maxFrame,
+                        bool &step_out_detected1, bool &step_out_detected2,
+                        int &current_center_exit1, int &current_center_exit2,
+                        cv::Point &p_out1, cv::Point &p_out2);
+
+    // Se añaden relevant_change y static_step como parámetros extra:
+    void computeTakeOff(int current_seq,
+                        int sure_frame1,
+                        int sure_frame2,
+                        int &il_found,
+                        int &ir_found,
+                        bool &pl_found,
+                        bool &pr_found,
+                        int relevant_change,
+                        int static_step);
+
+    // Ajustamos la firma de computeArrival para que reciba 8 parámetros:
+    void computeArrival(int startFrame,
+                        int maxFrame,
+                        int cur_objective,
+                        int &last_arrival_frame,
+                        int &nearest_arrival_code,
+                        bool &is_left,
+                        bool &real_arrival,
+                        float &nearest_arrival_distance);
+
+    bool checkReturnToCenter(int startSearchFrame, int maxFrame);
+
+    string buildFinalJson(const vector<Section> &sequences);
+    string buildDetailedJson(const vector<Section> &sequences);
 };
 
 #endif // MAIN_H

@@ -1,7 +1,7 @@
 #include "ComputerVisionWeb.h"
 
 // ========================================================================
-// Variables y utilidades globales (nuevas)
+// Variables y utilidades globales
 // ========================================================================
 cv::VideoWriter videoWriter;
 bool isVideoWriterInitialized = false;
@@ -87,20 +87,19 @@ vector<cv::Point2i> makeExpandedPolygon(const Position& pos, const cv::Mat& mask
             float angle = float((2 * CV_PI / num_directions) * i);
             cv::Point2f direction(std::cos(angle), std::sin(angle));
 
-            bool reached_limit = false;
             float dist;
             for (dist = 0; dist <= max_distance; dist += 1.0f)
             {
                 cv::Point2i expanded_point = cv::Point2i(start_point + direction * dist);
+                // Revisar límites de la imagen
                 if (expanded_point.y < 0 || expanded_point.y >= mask.rows ||
                     expanded_point.x < 0 || expanded_point.x >= mask.cols)
                 {
-                    reached_limit = true;
                     break;
                 }
+                // Si en la mascara ya no hay pie, se frena
                 if (mask.at<uchar>(expanded_point.y, expanded_point.x) == 0)
                 {
-                    reached_limit = true;
                     break;
                 }
             }
@@ -197,7 +196,7 @@ bool ComputerVisionWeb::feetIntersectsObjective(vector<cv::Point2i> &footPolygon
 }
 
 // ========================================================================
-// IntersectsObjective (versión nueva con 6 parámetros, sin 'frame')
+// IntersectsObjective
 // ========================================================================
 int ComputerVisionWeb::intersectsObjective(cv::Mat img,
                                            int index,
@@ -326,7 +325,7 @@ int ComputerVisionWeb::intersectsObjective(cv::Mat img,
 }
 
 // ========================================================================
-// processAvailableStepsWithCoverageArea (versión nueva con cv::Mat)
+// processAvailableStepsWithCoverageArea
 // ========================================================================
 void ComputerVisionWeb::processAvailableStepsWithCoverageArea(int index,
                                                               int cur_objective,
@@ -335,13 +334,12 @@ void ComputerVisionWeb::processAvailableStepsWithCoverageArea(int index,
     int pos_correction = frames_to_store / 2 + 3;
     if (index >= pos_correction)
     {
-        // Nuevo llama a processStepsWithCoverageArea con 3 params + Mat
         processStepsWithCoverageArea(index, cur_objective, cur_copy);
     }
 }
 
 // ========================================================================
-// processStepsWithCoverageArea (versión nueva con 3 parámetros + Mat)
+// processStepsWithCoverageArea
 // ========================================================================
 void ComputerVisionWeb::processStepsWithCoverageArea(int index,
                                                      int cur_objective,
@@ -377,7 +375,6 @@ void ComputerVisionWeb::processStepsWithCoverageArea(int index,
         cout << "Right foot position: " << p.x << ", " << p.y << endl;
     }
 
-    // Inicializar videoWriter si no está
     if (!isVideoWriterInitialized && !cur_copy.empty())
     {
         int frame_width  = cur_copy.cols;
@@ -400,7 +397,6 @@ void ComputerVisionWeb::processStepsWithCoverageArea(int index,
         double fontScale = 0.8;
         int thickness = 2;
 
-        // Colores
         cv::Scalar left_color  = leftStepOccurred
                                  ? cv::Scalar(0, 255, 0)
                                  : cv::Scalar(100, 0, 255);
@@ -557,8 +553,6 @@ bool ComputerVisionWeb::callApi(const string& videoUrl){
                                       frame["right_position"]["center"][1]);
 
                     // Decodificar la máscara
-                    // Nota: si usas nlohmann::json <3.6.0, .contains(...) no existe.
-                    // Usa if (frame.find("segmentation_mask")!=frame.end())
                     if (frame.find("segmentation_mask") != frame.end() &&
                         !frame["segmentation_mask"].is_null())
                     {
@@ -584,33 +578,29 @@ bool ComputerVisionWeb::callApi(const string& videoUrl){
     return false;
 }
 
-string ComputerVisionWeb::buildOutput(vector<MarkAndTime> sequence, int maxFrame)
-{
-    const int relevant_change = 10; //Number of centimeters for considering relevant change in position
-    const int static_step = 15;     //Number of frames for considering that step is not displacing
-    
-    int current_seq = 0,                    //index for starting current sequence
-        current_center_exit1 = 0, 
-        current_center_exit2 = 0,           //index for exiting center on current sequence for each foot
-        next_seq = 0;                       //index for starting next sequence
-    cv::Point p_out1, p_out2;
+// ========================================================================
+// buildOutput
+// ========================================================================
+string ComputerVisionWeb::buildOutput(vector<MarkAndTime> sequence, int maxFrame){
+    const int relevant_change = 10; //Number of centimeters for relevant movement
+    const int static_step = 15;     //Number of frames for considering no displacement
+
+    int current_seq = 0, current_center_exit1 = 0, current_center_exit2 = 0;
+    int next_seq = 0;
+    cv::Point p_out1, p_out2; // El punto central del pie al momento de salir del centro
     
     //Variables para estímulos
-    uint n_objectives = (uint)sequence.size();
-    int i, cur_objective, cur_frame;
-
-    // Lista de resultados finales
-    vector<Section> sequences;
+    uint n_objectives = (uint)sequence.size(); // Number of stimulis 
+    vector<Section> sequences; // Sections for output
     bool first_stimulus = true;
-    
+
     // Recorremos cada estímulo en la secuencia
-    for (int j = 0; j < (int)n_objectives; ++j)
-    {
+    for (int j = 0; j < (int)n_objectives; ++j){
         Section cur_section;
         item cur_item;
-        
-        cur_objective = sequence[j].mark_correct; 
-        cur_frame     = sequence[j].frame;
+
+        int cur_objective = sequence[j].mark_correct; // Current objective (0, .., 8)
+        int cur_frame     = sequence[j].frame;        // Current frame 
 
 #ifdef SHOW_DEBUG_TEXT
         cout << "Marking.\n\tCurrent stimulus: " << j << endl;
@@ -618,373 +608,45 @@ string ComputerVisionWeb::buildOutput(vector<MarkAndTime> sequence, int maxFrame
         cout << "\tCurrent stimulus index: " << cur_frame << endl;
 #endif
 
-        // Asumimos que el error, si ocurre, será “fallar en el objetivo correcto”:
-        bool step_center = true,    // si regresa o no al centro
-             step_objective = true, // si pisa o no el objetivo correcto
-             right_objective = true;// si pisa el objetivo equivocado
-             
-        // Avanzamos hasta que al menos un pie está en la zona 5
-        for (i = current_seq; i < maxFrame; ++i)
-        {
-            if (in_objective1[i] == 5 || in_objective2[i] == 5)
-                break;
-        }
+        // Estas cosas se asumen por ser el inicio del ejercicio
+        bool step_center     = true; 
+        bool step_objective  = true; 
+        bool right_objective = true;
 
-#ifdef SHOW_DEBUG_TEXT
-        cout << "\tCurrent sequence start - prev cur_frame: " << current_seq << endl;
-#endif
-        // Si el frame de estímulo es mayor que i, arrancamos en el frame de estímulo
+        // 1) Ajustar al centro
+        int i = skipUntilFootIsInCenter(current_seq, maxFrame);
         current_seq = (cur_frame >= i) ? cur_frame : i;
 
 #ifdef SHOW_DEBUG_TEXT
         cout << "\tCurrent sequence start - after cur_frame: " << current_seq << endl;
 #endif
 
-        // Buscar salida del centro (primer paso que ya no está en 5)
+        // 2) Buscar salida del centro
         bool step_out_detected1 = false, step_out_detected2 = false;
-        int sure_frame1 = 0, sure_frame2 = 0;
+        findCenterExit(current_seq, maxFrame,
+                       step_out_detected1, step_out_detected2,
+                       current_center_exit1, current_center_exit2,
+                       p_out1, p_out2);
 
-        // Búsqueda de salida con el pie izquierdo
-        for (i = current_seq; i < maxFrame; ++i)
-        {
-            if (!left_step[i]) // hasta que detectemos un step
-                continue;
+        if (step_out_detected1 || step_out_detected2){
+            // 3) Take-off
+            int il_found = 0, ir_found = 0;
+            bool pl_found = false, pr_found = false;
 
-#ifdef SHOW_DEBUG_TEXT
-            cout << "\tCurrent frame - search left position exit: " << i << endl;
-#endif
+            // Pasamos relevant_change y static_step a computeTakeOff
+            computeTakeOff(current_seq,
+                           current_center_exit1,
+                           current_center_exit2,
+                           il_found,
+                           ir_found,
+                           pl_found,
+                           pr_found,
+                           relevant_change,
+                           static_step);
 
-            if (in_objective1[i] != 5)
-            {
-#ifdef SHOW_DEBUG_TEXT
-                cout << "\tExit frame left - position exit: " << i << endl;
-                cout << "\tExit frame left - code found: " << in_objective1[i] << endl;
-#endif
-                current_center_exit1 = i;
-                p_out1      = left_foot[i];
-                sure_frame1 = i;
-                step_out_detected1 = true;
-                break;
-            }
-        }
-
-        // Búsqueda de salida con el pie derecho
-        for (i = current_seq; i < maxFrame; ++i)
-        {
-            if (!right_step[i])
-                continue;
-
-#ifdef SHOW_DEBUG_TEXT
-            cout << "\tCurrent frame - search right position exit: " << i << endl;
-#endif
-
-            if (in_objective2[i] != 5)
-            {
-#ifdef SHOW_DEBUG_TEXT
-                cout << "\tExit frame right - position exit: " << i << endl;
-                cout << "\tExit frame right - code found: " << in_objective2[i] << endl;
-#endif
-                current_center_exit2 = i;
-                p_out2      = right_foot[i];
-                sure_frame2 = i;
-                step_out_detected2 = true;
-                break;
-            }
-        }
-
-        // Si uno de los dos pies salió (o ambos), calculamos
-        if (step_out_detected1 || step_out_detected2)
-        {
-            // Si no se detectó la izquierda, copiamos la derecha
-            if (!step_out_detected1)
-            {
-                p_out1 = p_out2;
-                current_center_exit1 = current_center_exit2;
-                sure_frame1 = sure_frame2;
-            }
-            // Y viceversa
-            if (!step_out_detected2)
-            {
-                p_out2 = p_out1;
-                current_center_exit2 = current_center_exit1;
-                sure_frame2 = sure_frame1;
-            }
-
-            // ===============================
-            // Cálculo de la salida (take-off)
-            // ===============================
-
-            // Indices y banderas para pie izquierdo
-            int lindex_1, lindex_2, rindex_1, rindex_2;
-            int il_found = 0, ir_found = 0, il_last = current_seq + 1, ir_last = current_seq + 1;
-            int il_initial = 0, il_last_stepping = 0, ir_initial = 0, ir_last_stepping = 0;
-
-            bool stepping = false, first = true, pl_found = false, pr_found = false;
-            
-            // Tomamos la posición “salida” del pie izquierdo
-            cv::Point2f p_out_s = imageToScene(p_out1);
-            cv::Point2f p_center = contourCentersScene[4]; // El 4 era el “centro”
-            float d_center_obj = sqrt((p_out_s.x - p_center.x)*(p_out_s.x - p_center.x)
-                                   + (p_out_s.y - p_center.y)*(p_out_s.y - p_center.y));
-
-#ifdef SHOW_DEBUG_TEXT
-            cout << "\tProcessing take-off left..." << endl;
-            cout << "\tCenter (x,y): " << p_center.x << ", " << p_center.y << endl;
-            cout << "\tSure out (x,y): " << p_out_s.x << ", " << p_out_s.y << endl;
-#endif
-
-            // Recorremos frames hacia atrás (desde sure_frame1 hasta current_seq)
-            for (i = sure_frame1; i >= current_seq; --i)
-            {
-#ifdef SHOW_DEBUG_TEXT
-                cout << "\tTake-off - left - frame: " << i << endl;
-#endif
-                if (first)
-                {
-                    if (!stepping && left_step[i])
-                    {
-#ifdef SHOW_DEBUG_TEXT
-                        cout << "\tTake-off - left - start stepping... " << endl;
-#endif
-                        stepping   = true;
-                        il_last    = i;
-                        il_initial = i;
-                        lindex_1   = i;
-                    }
-                    else if (stepping && !left_step[i])
-                    {
-#ifdef SHOW_DEBUG_TEXT
-                        cout << "\tTake-off - left - stop stepping... " << endl;
-#endif
-                        il_last_stepping = i - 1;
-                        stepping = false;
-                        first = false; 
-                    }
-                }
-                else
-                {
-                    if (left_step[i])
-                    {
-#ifdef SHOW_DEBUG_TEXT
-                        cout << "\tTake-off - left - left following found... " << endl;
-#endif
-                        il_last  = i;
-                        lindex_2 = i;
-
-                        // Distancia entre el step anterior y el actual
-                        cv::Point2f p1 = imageToScene(left_foot[lindex_1]);
-                        cv::Point2f p2 = imageToScene(left_foot[lindex_2]);
-                        float d  = cv::norm(p2 - p1);
-                        // Proyección con p_out_s
-                        float d1 = magnitude(projectVector(
-                            cv::Point2f(p1.x - p_out_s.x, p1.y - p_out_s.y),
-                            cv::Point2f(p_center.x - p_out_s.x, p_center.y - p_out_s.y)));
-                        float d2 = magnitude(projectVector(
-                            cv::Point2f(p2.x - p_out_s.x, p2.y - p_out_s.y),
-                            cv::Point2f(p_center.x - p_out_s.x, p_center.y - p_out_s.y)));
-
-#ifdef SHOW_DEBUG_TEXT
-                        cout << "\tDistance between steps: " << d << endl;
-                        cout << "\tProjected distance 1: " << d1 << endl;
-                        cout << "\tProjected distance 2: " << d2 << endl;
-                        cout << "\tDistance center->obj: " << d_center_obj << endl;
-#endif
-                        if (d1 < d2 && d > relevant_change &&
-                            il_initial - il_last_stepping < static_step &&
-                            d2 < d_center_obj && odist1[i] != 0)
-                        {
-#ifdef SHOW_DEBUG_TEXT
-                            cout << "\tTake-off - left - keeps approaching objective... " << endl;
-#endif
-                            stepping   = true;
-                            first      = true;
-                            lindex_1   = lindex_2;
-                            il_initial = lindex_1;
-                            continue;
-                        }
-
-                        // Si llegamos aquí, p1 es el take-off
-                        pl_found = true;
-
-#ifdef SHOW_DEBUG_TEXT
-                        cout << "\tTake-off - left - il initial:" << il_initial << endl;
-                        cout << "\tTake-off - left - il last stepping:" << il_last_stepping << endl;
-                        cout << "\tTake-off - left - stepping diff:" << (il_initial - il_last_stepping) << endl;
-#endif
-                        if (il_initial - il_last_stepping >= static_step)
-                        {
-                            il_found = il_initial + 1;
-#ifdef SHOW_DEBUG_TEXT
-                            cout << "\tTake-off - left - static step: Found at " << il_found << "." << endl;
-#endif
-                            break;
-                        }
-                        if (d <= relevant_change)
-                        {
-                            il_found = lindex_2 + 1;
-#ifdef SHOW_DEBUG_TEXT
-                            cout << "\tTake-off - left - irrelevant step distance: Found at " << il_found << "." << endl;
-#endif
-                            break;
-                        }
-                        if (d1 > d2)
-                        {
-                            il_found = il_initial + 1;
-#ifdef SHOW_DEBUG_TEXT
-                            cout << "\tTake-off - left - first step farther than second: Found at " << il_found << ". " << endl;
-#endif
-                        }
-                        else
-                        {
-                            il_found = lindex_2 + 1;
-#ifdef SHOW_DEBUG_TEXT
-                            cout << "\tTake-off - left - second step farther than first: Found at " << il_found << ". " << endl;
-#endif
-                        }
-                        break;
-                    }
-                }
-            }
-            if (!pl_found)
-            {
-                il_found = il_last + 1;
-                pl_found = true;
-#ifdef SHOW_DEBUG_TEXT
-                cout << "\tTake-off - left - not found so take last step: Found at " << il_found << ". " << endl;
-#endif
-            }
-
-            // Ahora el pie derecho
-            stepping = false;
-            first    = true;
-            p_out_s  = imageToScene(p_out2);
-            d_center_obj = cv::norm(p_out_s - p_center);
-
-#ifdef SHOW_DEBUG_TEXT
-            cout << "\tProcessing take-off right..." << endl;
-            cout << "\tCenter (x,y): " << p_center.x << ", " << p_center.y << endl;
-            cout << "\tSure out (x,y): " << p_out_s.x << ", " << p_out_s.y << endl;
-#endif
-            for (i = sure_frame2; i >= current_seq; --i)
-            {
-#ifdef SHOW_DEBUG_TEXT
-                cout << "\tTake-off - right - frame: " << i << endl;
-#endif
-                if (first)
-                {
-                    if (!stepping && right_step[i])
-                    {
-#ifdef SHOW_DEBUG_TEXT
-                        cout << "\tTake-off - right - start stepping... " << endl;
-#endif
-                        stepping   = true;
-                        ir_last    = i;
-                        ir_initial = i;
-                        rindex_1   = i;
-                    }
-                    else if (stepping && !right_step[i])
-                    {
-#ifdef SHOW_DEBUG_TEXT
-                        cout << "\tTake-off - right - stop stepping... " << endl;
-#endif
-                        ir_last_stepping = i + 1;
-                        stepping = false;
-                        first    = false;
-                    }
-                }
-                else
-                {
-                    if (right_step[i])
-                    {
-#ifdef SHOW_DEBUG_TEXT
-                        cout << "\tTake-off - right - right following found... " << endl;
-#endif
-                        ir_last  = i;
-                        rindex_2 = i;
-
-                        cv::Point2f p1 = imageToScene(right_foot[rindex_1]);
-                        cv::Point2f p2 = imageToScene(right_foot[rindex_2]);
-                        float d  = cv::norm(p2 - p1);
-
-                        float d1 = magnitude(projectVector(
-                            cv::Point2f(p1.x - p_out_s.x, p1.y - p_out_s.y),
-                            cv::Point2f(p_center.x - p_out_s.x, p_center.y - p_out_s.y)));
-                        float d2 = magnitude(projectVector(
-                            cv::Point2f(p2.x - p_out_s.x, p2.y - p_out_s.y),
-                            cv::Point2f(p_center.x - p_out_s.x, p_center.y - p_out_s.y)));
-
-#ifdef SHOW_DEBUG_TEXT
-                        cout << "\tDistance between steps: " << d << endl;
-                        cout << "\tProjected distance 1: " << d1 << endl;
-                        cout << "\tProjected distance 2: " << d2 << endl;
-                        cout << "\tDistance center->obj: " << d_center_obj << endl;
-#endif
-                        if (d1 < d2 && d > relevant_change &&
-                            ir_initial - ir_last_stepping < static_step &&
-                            d2 < d_center_obj && odist2[i] != 0)
-                        {
-#ifdef SHOW_DEBUG_TEXT
-                            cout << "\tTake-off - right - keeps approaching objective... " << endl;
-#endif
-                            stepping   = true;
-                            first      = true;
-                            rindex_1   = rindex_2;
-                            ir_initial = rindex_1;
-                            continue;
-                        }
-                        pr_found = true;
-#ifdef SHOW_DEBUG_TEXT
-                        cout << "\tTake-off - right - ir initial:" << ir_initial << endl;
-                        cout << "\tTake-off - right - ir last stepping:" << ir_last_stepping << endl;
-                        cout << "\tTake-off - right - stepping diff:" << (ir_initial - ir_last_stepping) << endl;
-#endif
-                        if (ir_initial - ir_last_stepping >= static_step)
-                        {
-                            ir_found = ir_initial + 1;
-#ifdef SHOW_DEBUG_TEXT
-                            cout << "\tTake-off - right - static step: Found at " << ir_found << "." << endl;
-#endif
-                            break;
-                        }
-                        if (d <= relevant_change)
-                        {
-                            ir_found = rindex_2 + 1;
-#ifdef SHOW_DEBUG_TEXT
-                            cout << "\tTake-off - right - irrelevant step distance: Found at " << ir_found << "." << endl;
-#endif
-                            break;
-                        }
-                        if (d1 > d2)
-                        {
-                            ir_found = ir_initial + 1;
-#ifdef SHOW_DEBUG_TEXT
-                            cout << "\tTake-off - right - first step farther than second: Found at " << ir_found << "." << endl;
-#endif
-                        }
-                        else
-                        {
-                            ir_found = rindex_2 + 1;
-#ifdef SHOW_DEBUG_TEXT
-                            cout << "\tTake-off - right - second step farther than first: Found at " << ir_found << "." << endl;
-#endif
-                        }
-                        break;
-                    }
-                }
-            }
-            if (!pr_found)
-            {
-                ir_found = ir_last + 1;
-                pr_found = true;
-#ifdef SHOW_DEBUG_TEXT
-                cout << "\tTake-off - right - not found so take last step: Found at " << ir_found << ". " << endl;
-#endif
-            }
-
-            // Asignar take-off en items
-            if (pl_found && pr_found)
-            {
-                if (il_found < ir_found) //Take-off is from left
+            // Asignar “take-off” al item
+            if (pl_found && pr_found){
+                if (il_found < ir_found)
                 {
                     cur_item.code   = 5;
                     cur_item.d_l    = odist1[il_found];
@@ -994,9 +656,6 @@ string ComputerVisionWeb::buildOutput(vector<MarkAndTime> sequence, int maxFrame
                     cur_item.frame  = il_found;
                     cur_section.items.push_back(cur_item);
                     cur_section.takeoff_frame = il_found;
-#ifdef SHOW_DEBUG_TEXT
-                    cout << "\tTake-off: Both found - decided left" << endl;
-#endif
                 }
                 else
                 {
@@ -1008,24 +667,18 @@ string ComputerVisionWeb::buildOutput(vector<MarkAndTime> sequence, int maxFrame
                     cur_item.frame  = ir_found;
                     cur_section.items.push_back(cur_item);
                     cur_section.takeoff_frame = ir_found;
-#ifdef SHOW_DEBUG_TEXT
-                    cout << "\tTake-off: Both found - decided right" << endl;
-#endif
                 }
             }
             else if (pl_found)
             {
                 cur_item.code   = 5;
                 cur_item.d_l    = odist1[il_found];
-                cur_item.d_r    = odist2[il_last];
+                cur_item.d_r    = odist2[ir_found];
                 cur_item.step_l = true;
                 cur_item.step_r = false;
                 cur_item.frame  = il_found;
                 cur_section.items.push_back(cur_item);
                 cur_section.takeoff_frame = il_found;
-#ifdef SHOW_DEBUG_TEXT
-                cout << "\tTake-off: One found - left" << endl;
-#endif
             }
             else if (pr_found)
             {
@@ -1037,9 +690,6 @@ string ComputerVisionWeb::buildOutput(vector<MarkAndTime> sequence, int maxFrame
                 cur_item.frame  = ir_found;
                 cur_section.items.push_back(cur_item);
                 cur_section.takeoff_frame = ir_found;
-#ifdef SHOW_DEBUG_TEXT
-                cout << "\tTake-off: One found - right" << endl;
-#endif
             }
             else
             {
@@ -1051,135 +701,40 @@ string ComputerVisionWeb::buildOutput(vector<MarkAndTime> sequence, int maxFrame
                 cur_item.frame  = (il_found < ir_found ? il_found : ir_found);
                 cur_section.items.push_back(cur_item);
                 cur_section.takeoff_frame = (il_found < ir_found ? il_found : ir_found);
-#ifdef SHOW_DEBUG_TEXT
-                cout << "\tTake-off: None found" << endl;
-#endif
             }
 
-#ifdef SHOW_DEBUG_TEXT
-            cout << "\tTake-off: " << cur_item.frame << endl;
-            cout << "\tTake-off - left?: " << cur_item.step_l << endl;
-#endif
-
-            // ================================
-            // Cálculo de llegada (arrival)
-            // ================================
-            int last_arrival_frame = -1; 
-            int nearest_arrival_code = 0;
-            int last_real = -1;
+            // 4) Arrival
+            int last_arrival_frame      = -1;
+            int nearest_arrival_code    = 0;
+            bool is_left                = true;
+            bool real_arrival           = false;
             float nearest_arrival_distance = FLT_MAX;
-            bool still_near_center_l = true, still_near_center_r = true;
-            bool real_arrival = false, is_left = true;
 
-            for (int i2 = (current_center_exit1 < current_center_exit2 ?
-                           current_center_exit1 : current_center_exit2);
-                 i2 < maxFrame; ++i2)
-            {
-#ifdef SHOW_DEBUG_TEXT
-                cout << "\tArrival - frame: " << i2 << endl;
-#endif
-                // Revisa si el pie izquierdo ya salió de la zona 5
-                if (in_objective1[i2] != 5)
-                {
-#ifdef SHOW_DEBUG_TEXT
-                    cout << "\tArrival - check left far center..." << endl;
-#endif
-                    still_near_center_l = false;
-                    if (left_step[i2])
-                    {
-#ifdef SHOW_DEBUG_TEXT
-                        cout << "\tArrival - check left far center step - code: "
-                             << in_objective1[i2] << endl;
-                        cout << "\tArrival - check left far center step - distance: "
-                             << odist1[i2] << endl;
-                        cout << "\tArrival - check left far center step - last_real: "
-                             << last_real << endl;
-#endif
-                        if (odist1[i2] == 0 && last_real != in_objective1[i2])
-                        {
-                            last_arrival_frame = i2;
-                            last_real          = nearest_arrival_code = in_objective1[i2];
-                            nearest_arrival_distance = 0;
-                            real_arrival       = true;
-                            is_left           = true;
-#ifdef SHOW_DEBUG_TEXT
-                            cout << "\tArrival - left real arrival found at: " << i2 << endl;
-#endif
-                        }
-                        if (!real_arrival && odist1[i2] < nearest_arrival_distance)
-                        {
-                            nearest_arrival_distance = odist1[i2];
-                            last_arrival_frame       = i2;
-                            nearest_arrival_code     = in_objective1[i2];
-                            is_left                  = true;
-#ifdef SHOW_DEBUG_TEXT
-                            cout << "\tArrival - left near arrival found at: " << i2 << endl;
-                            cout << "\tArrival - left near arrival distance: " << nearest_arrival_distance << endl;
-#endif
-                        }
-                    }
-                }
+            int earliest_center_exit = (current_center_exit1 < current_center_exit2
+                                        ? current_center_exit1
+                                        : current_center_exit2);
 
-                // Revisa si el pie derecho ya salió de la zona 5
-                if (in_objective2[i2] != 5)
-                {
-#ifdef SHOW_DEBUG_TEXT
-                    cout << "\tArrival - check right far center..." << endl;
-#endif
-                    still_near_center_r = false;
-                    if (right_step[i2])
-                    {
-#ifdef SHOW_DEBUG_TEXT
-                        cout << "\tArrival - check right far center step - code: "
-                             << in_objective2[i2] << endl;
-                        cout << "\tArrival - check right far center step - distance: "
-                             << odist2[i2] << endl;
-                        cout << "\tArrival - check right far center step - last_real: "
-                             << last_real << endl;
-#endif
-                        if (odist2[i2] == 0 && last_real != in_objective2[i2])
-                        {
-                            last_arrival_frame = i2;
-                            last_real          = nearest_arrival_code = in_objective2[i2];
-                            nearest_arrival_distance = 0;
-                            real_arrival       = true;
-                            is_left           = false;
-#ifdef SHOW_DEBUG_TEXT
-                            cout << "\tArrival - right real arrival found at: " << i2 << endl;
-#endif
-                        }
-                        if (!real_arrival && odist2[i2] < nearest_arrival_distance)
-                        {
-                            nearest_arrival_distance = odist2[i2];
-                            last_arrival_frame       = i2;
-                            nearest_arrival_code     = in_objective2[i2];
-                            is_left                  = false;
-#ifdef SHOW_DEBUG_TEXT
-                            cout << "\tArrival - right near arrival found at: " << i2 << endl;
-                            cout << "\tArrival - right near arrival distance: " << nearest_arrival_distance << endl;
-#endif
-                        }
-                    }
-                }
+            computeArrival(
+                earliest_center_exit,
+                maxFrame,
+                cur_objective,
+                last_arrival_frame,
+                nearest_arrival_code,
+                is_left,
+                real_arrival,
+                nearest_arrival_distance
+            );
 
-                // Checar si uno regresó al centro
-                if (!still_near_center_l && in_objective1[i2] == 5 && left_step[i2])
-                {
-#ifdef SHOW_DEBUG_TEXT
-                    cout << "\tArrival - left step returning to center found at: " << i2 << endl;
-#endif
-                    next_seq = i2;
-                    break;
-                }
-                if (!still_near_center_r && in_objective2[i2] == 5 && right_step[i2])
-                {
-#ifdef SHOW_DEBUG_TEXT
-                    cout << "\tArrival - right step returning to center found at: " << i2 << endl;
-#endif
-                    next_seq = i2;
-                    break;
-                }
-            }
+            cur_item.code  = nearest_arrival_code;
+            cur_item.d_l   = (last_arrival_frame >= 0 ? odist1[last_arrival_frame] : -1.f);
+            cur_item.d_r   = (last_arrival_frame >= 0 ? odist2[last_arrival_frame] : -1.f);
+            cur_item.step_l= (is_left ? 1 : 0);
+            cur_item.step_r= (is_left ? 0 : 1);
+            cur_item.frame = last_arrival_frame;
+
+            cur_section.items.push_back(cur_item);
+            cur_section.arrival_frame = last_arrival_frame;
+            cur_section.arrival_code  = nearest_arrival_code;
 
             // Validar si llegó al objetivo correcto
             if (!real_arrival || nearest_arrival_code != cur_objective)
@@ -1190,82 +745,15 @@ string ComputerVisionWeb::buildOutput(vector<MarkAndTime> sequence, int maxFrame
                     step_objective = false;
             }
 
-            cur_item.code  = nearest_arrival_code;
-            cur_item.d_l   = (last_arrival_frame>=0 ? odist1[last_arrival_frame] : -1.f);
-            cur_item.d_r   = (last_arrival_frame>=0 ? odist2[last_arrival_frame] : -1.f);
-            cur_item.step_l= (is_left ? 1 : 0);
-            cur_item.step_r= (is_left ? 0 : 1);
-            cur_item.frame = last_arrival_frame;
+            // 5) Retorno al centro
+            bool hasReturned = checkReturnToCenter(next_seq, maxFrame);
+            if (!hasReturned) step_center = false;
 
-            cur_section.items.push_back(cur_item);
-            cur_section.arrival_frame = last_arrival_frame;
-            cur_section.arrival_code  = nearest_arrival_code;
-
-#ifdef SHOW_DEBUG_TEXT
-            cout << "\tArrival - arrival frame: " << cur_section.arrival_frame << endl;
-            cout << "\tArrival - arrival code: " << cur_section.arrival_code << endl;
-            if (is_left)
-                cout << "\tArrival - arrival distance: " << cur_item.d_l << endl;
-            else
-                cout << "\tArrival - arrival distance: " << cur_item.d_r << endl;
-#endif
-            // Revisar si regresa al centro
-            bool still_far_center_l = true, still_far_center_r = true;
-            bool ready_l = false, ready_r = false;
-            step_center = false;
-
-            for (int i2 = next_seq; i2 < maxFrame; ++i2)
-            {
-#ifdef SHOW_DEBUG_TEXT
-                cout << "\tReturn to center - frame: " << i2 << endl;
-#endif
-                if (in_objective1[i2] == 5)
-                {
-                    still_far_center_l = false;
-                    if (left_step[i2])
-                    {
-#ifdef SHOW_DEBUG_TEXT
-                        cout << "\tReturn to center - found left at: " << i2 << endl;
-#endif
-                        step_center = true;
-                        break;
-                    }
-                }
-                if (in_objective2[i2] == 5)
-                {
-                    still_far_center_r = false;
-                    if (right_step[i2])
-                    {
-#ifdef SHOW_DEBUG_TEXT
-                        cout << "\tReturn to center - found right at: " << i2 << endl;
-#endif
-                        step_center = true;
-                        break;
-                    }
-                }
-                if(!still_far_center_l && in_objective1[i2] != 5)
-                    ready_l = true;
-                if(!still_far_center_r && in_objective2[i2] != 5)
-                    ready_r = true;
-
-                if (ready_l && ready_r)
-                {
-#ifdef SHOW_DEBUG_TEXT
-                    cout << "\tReturn to center - both ready at: " << i2 << endl;
-#endif
-                    break;
-                }
-            }
-
-            // Evaluamos error
+            // 6) Evaluar error
             cur_section.error = (right_objective && step_objective && step_center) ? false : true;
-#ifdef SHOW_DEBUG_TEXT
-            cout << "\tFinal stimulus error: " << cur_section.error << endl;
-#endif
-
             sequences.push_back(cur_section);
 
-            // Arrancamos la siguiente secuencia en next_seq
+            // Avanza la secuencia
             current_seq    = next_seq;
             first_stimulus = false;
         }
@@ -1274,63 +762,14 @@ string ComputerVisionWeb::buildOutput(vector<MarkAndTime> sequence, int maxFrame
 #ifdef SHOW_DEBUG_TEXT
             cout << "\tNo step out found. " << endl;
 #endif
-            break; //No step out => no más estímulos relevantes
+            break; // No salió del centro => se termina
         }
-    } // fin for stimuli
-
-    // ============================================================
-    // Generar JSON "json" y "json2" y retornar "json"
-    // ============================================================
-    // 1) "json" resumido
-    string json = "[\n";
-    for(size_t i = 0; i < sequences.size(); ++i)
-    {
-        const Section& sec = sequences[i];
-        json += "    {\n";
-        json += "    \"id_sequence\": " + to_string(i) + ",\n";
-        json += "    \"takeoff_frame\": " + to_string(sec.takeoff_frame) + ",\n";
-        json += "    \"arrival_frame\": " + to_string(sec.arrival_frame) + ",\n";
-        json += "    \"error\": " + string(sec.error ? "true" : "false") + "\n";
-        json += "    }";
-        if (i < sequences.size() - 1) json += ",";
-        json += "\n";
     }
-    json += "]";
 
-    // 2) "json2" detallado
-    string json2 = "[\n";
-    for(size_t i = 0; i < sequences.size(); ++i)
-    {
-        const Section& sec = sequences[i];
-        json2 += "    {\n";
-        json2 += "    \"id_sequence\": " + to_string(i) + ",\n";
-        json2 += "    \"takeoff_frame\": " + to_string(sec.takeoff_frame) + ",\n";
-        json2 += "    \"arrival_frame\": " + to_string(sec.arrival_frame) + ",\n";
-        json2 += "    \"error\": " + string(sec.error ? "true" : "false") + ",\n";
-        json2 += "    \"items\": [\n";
-        for (size_t j = 0; j < sec.items.size(); ++j)
-        {
-            const item& it = sec.items[j];
-            json2 += "        {\n";
-            json2 += "        \"code\": " + to_string(it.code) + ",\n";
-            json2 += "        \"intersects\": " + to_string(it.intersects) + ",\n";
-            json2 += "        \"frame\": " + to_string(it.frame) + ",\n";
-            json2 += "        \"d_l\": " + to_string(it.d_l) + ",\n";
-            json2 += "        \"d_r\": " + to_string(it.d_r) + ",\n";
-            json2 += "        \"step_l\": " + string(it.step_l ? "true" : "false") + ",\n";
-            json2 += "        \"step_r\": " + string(it.step_r ? "true" : "false") + "\n";
-            json2 += "        }";
-            if (j < sec.items.size() - 1) json2 += ",";
-            json2 += "\n";
-        }
-        json2 += "    ]\n";
-        json2 += "    }";
-        if (i < sequences.size() - 1) json2 += ",";
-        json2 += "\n";
-    }
-    json2 += "]";
+    // 7) JSON final
+    string json  = buildFinalJson(sequences);
+    string json2 = buildDetailedJson(sequences);
 
-    // Imprimir json2 para debug, retornar json
     cout << "====================================\n" << json2 << endl;
     cout << "====================================\n" << endl;
 
@@ -1369,7 +808,7 @@ string ComputerVisionWeb::mainFunction(string contourjson,
         cout << "Error al llamar a la API pose-IA." << endl;
     }
 
-    // Parse contornos
+    // Parse de contornos
     {
         istringstream iss(contourjson);
         Json::Value root;
@@ -1398,7 +837,7 @@ string ComputerVisionWeb::mainFunction(string contourjson,
         calib_h = stoi(string_calib_h);
     }
 
-    // Parse la secuencia
+    // Parse de la secuencia
     vector<MarkAndTime> sequence;
     {
         auto json = nlohmann::json::parse(jsonString);
@@ -1411,10 +850,10 @@ string ComputerVisionWeb::mainFunction(string contourjson,
         }
     }
 
-    // Descarga de media
+    // Descarga
     downloadMedia(videoUrl, imageUrl);
 
-    // Apertura del video
+    // Abrir el video
     string urlVideo = "/usr/src/app/mcp-vision-detection/video.mp4";
     string urlBG    = "/usr/src/app/mcp-vision-detection/bg.jpg";
 
@@ -1467,6 +906,7 @@ string ComputerVisionWeb::mainFunction(string contourjson,
 
             float scaleX = float(real_w) / float(calib_w);
             float scaleY = float(real_h) / float(calib_h);
+
             for (auto &ct : contornos)
             {
                 for (auto &p : ct.points)
@@ -1502,7 +942,7 @@ string ComputerVisionWeb::mainFunction(string contourjson,
     // Recalibrar homografía
     H = recalibrateHomography();
 
-    // Proyectar contornos
+    // Proyectar contornos a "contoursScene"
     for (auto &c : contornos)
     {
         Contour cont;
@@ -1524,8 +964,8 @@ string ComputerVisionWeb::mainFunction(string contourjson,
     // Inicializar arrays
     left_foot.resize(maxFrame);
     right_foot.resize(maxFrame);
-    left_step.resize(maxFrame, 0);
-    right_step.resize(maxFrame, 0);
+    left_step.resize(maxFrame, false);
+    right_step.resize(maxFrame, false);
     left_rects_s.resize(maxFrame);
     right_rects_s.resize(maxFrame);
     in_objective1.resize(maxFrame, 0);
@@ -1540,15 +980,13 @@ string ComputerVisionWeb::mainFunction(string contourjson,
     // Expand distance (para makeExpandedPolygon)
     float expand_distance = 10.0f;
 
-    // Rellenar polygons
     for (int i = 0; i < (int)maxFrame; ++i)
     {
-        // Si no hay mask, se usa un polígono mínimo
         cv::Mat foot_mask = frames_info[i].segmentation_mask;
 
-        left_feet[i] = makeExpandedPolygon(frames_info[i].left_position,
-                                           foot_mask,
-                                           expand_distance);
+        left_feet[i]  = makeExpandedPolygon(frames_info[i].left_position,
+                                            foot_mask,
+                                            expand_distance);
         right_feet[i] = makeExpandedPolygon(frames_info[i].right_position,
                                             foot_mask,
                                             expand_distance);
@@ -1571,7 +1009,7 @@ string ComputerVisionWeb::mainFunction(string contourjson,
         }
     }
 
-    // Volver a abrir video para procesar frames
+    // Re-abrir video
     vtest.open(urlVideo);
     if (!vtest.isOpened())
     {
@@ -1579,10 +1017,10 @@ string ComputerVisionWeb::mainFunction(string contourjson,
         return "El video no abrio la segunda vez!!";
     }
 
-    map<int,int>::iterator frame_it = msecs.begin();
+    auto frame_it = msecs.begin();
     unsigned int j_cur = 0;
-    unsigned int n_objectives = (unsigned int)sequence.size();
-    int cur_objective = (n_objectives > 0) ? sequence[0].mark_correct : -1;
+    unsigned int nObjs = (unsigned int)sequence.size();
+    int cur_objective = (nObjs > 0) ? sequence[0].mark_correct : -1;
 
     cv::Mat cur_copy;
     for (unsigned int i = 0; i < maxFrame; ++i)
@@ -1591,7 +1029,7 @@ string ComputerVisionWeb::mainFunction(string contourjson,
         vtest >> current;
 
         // Ajustar objective actual
-        for (unsigned int j = j_cur; j < n_objectives; ++j)
+        for (unsigned int j = j_cur; j < nObjs; ++j)
         {
             MarkAndTime &m = sequence[j];
             if (frame < (unsigned int)m.frame) break;
@@ -1602,14 +1040,12 @@ string ComputerVisionWeb::mainFunction(string contourjson,
 #ifdef SHOW_INTERMEDIATE_RESULTS
         current.copyTo(cur_copy);
 #endif
-        // Llamada a la versión nueva de processAvailableSteps con 3 params + Mat
         processAvailableStepsWithCoverageArea(i, cur_objective, cur_copy);
-
         frame_it++;
     }
     vtest.release();
 
-    // Construir salida final
+    // Por último, llamamos buildOutput
     string out = buildOutput(sequence, maxFrame);
 
 #ifdef SHOW_FINAL_RESULTS
@@ -1618,4 +1054,423 @@ string ComputerVisionWeb::mainFunction(string contourjson,
 #endif
 
     return out;
+}
+
+// ========================================================================
+// aux functions for buildOutput
+// ========================================================================
+int ComputerVisionWeb::skipUntilFootIsInCenter(int startFrame, int maxFrame){
+    for (int i = startFrame; i < maxFrame; ++i)
+    {
+        if (in_objective1[i] == 5 || in_objective2[i] == 5)
+            return i;
+    }
+    return maxFrame; 
+}
+
+void ComputerVisionWeb::findCenterExit(int startFrame, int maxFrame,
+                                       bool &step_out_detected1, bool &step_out_detected2,
+                                       int &current_center_exit1, int &current_center_exit2,
+                                       cv::Point &p_out1, cv::Point &p_out2)
+{
+    // Pie izquierdo
+    for (int i = startFrame; i < maxFrame; ++i)
+    {
+        if (!left_step[i]) continue;
+        if (in_objective1[i] != 5)
+        {
+            current_center_exit1 = i;
+            p_out1 = cv::Point(left_foot[i].x, left_foot[i].y);
+            step_out_detected1 = true;
+            break;
+        }
+    }
+
+    // Pie derecho
+    for (int i = startFrame; i < maxFrame; ++i)
+    {
+        if (!right_step[i]) continue;
+        if (in_objective2[i] != 5)
+        {
+            current_center_exit2 = i;
+            p_out2 = cv::Point(right_foot[i].x, right_foot[i].y);
+            step_out_detected2 = true;
+            break;
+        }
+    }
+
+    // Si uno no se detectó, copiamos del otro
+    if (!step_out_detected1 && step_out_detected2)
+    {
+        p_out1 = p_out2;
+        current_center_exit1 = current_center_exit2;
+    }
+    else if (!step_out_detected2 && step_out_detected1)
+    {
+        p_out2 = p_out1;
+        current_center_exit2 = current_center_exit1;
+    }
+}
+
+void ComputerVisionWeb::computeTakeOff(int current_seq,
+                                       int sure_frame1,
+                                       int sure_frame2,
+                                       int &il_found,
+                                       int &ir_found,
+                                       bool &pl_found,
+                                       bool &pr_found,
+                                       int relevant_change,
+                                       int static_step){
+    // =====================
+    // Pie izquierdo
+    // =====================
+    {
+        bool stepping = false, first = true;
+        int il_last = current_seq + 1;
+        int il_last_stepping = 0;
+        int lindex_1 = 0, lindex_2 = 0;
+        il_found = sure_frame1 + 1;
+        pl_found = false;
+
+        // Convertimos a "scene" la posición de salida
+        cv::Point2f p_out_s = imageToScene(cv::Point2f(left_foot[sure_frame1]));
+        cv::Point2f p_center = contourCentersScene[4]; // marca 5
+        float d_center_obj = cv::norm(p_out_s - p_center);
+
+        auto projectVector = [&](cv::Point2f v, cv::Point2f onto){
+            float dotp = v.x * onto.x + v.y * onto.y;
+            float onto_len_sq = onto.x*onto.x + onto.y*onto.y;
+            if (onto_len_sq == 0) return cv::Point2f(0,0);
+            float scale = dotp / onto_len_sq;
+            return cv::Point2f(onto.x * scale, onto.y * scale);
+        };
+        auto magnitude = [&](cv::Point2f v){
+            return sqrt(v.x*v.x + v.y*v.y);
+        };
+
+        for (int i = sure_frame1; i >= current_seq; --i)
+        {
+            if (first)
+            {
+                if (!stepping && left_step[i])
+                {
+                    stepping   = true;
+                    il_last    = i;
+                    lindex_1   = i;
+                }
+                else if (stepping && !left_step[i])
+                {
+                    il_last_stepping = i - 1;
+                    stepping = false;
+                    first    = false;
+                }
+            }
+            else
+            {
+                if (left_step[i])
+                {
+                    il_last  = i;
+                    lindex_2 = i;
+
+                    cv::Point2f p1 = imageToScene(left_foot[lindex_1]);
+                    cv::Point2f p2 = imageToScene(left_foot[lindex_2]);
+                    float d  = cv::norm(p2 - p1);
+
+                    float d1 = magnitude(projectVector(
+                                cv::Point2f(p1.x - p_out_s.x, p1.y - p_out_s.y),
+                                cv::Point2f(p_center.x - p_out_s.x, p_center.y - p_out_s.y)));
+                    float d2 = magnitude(projectVector(
+                                cv::Point2f(p2.x - p_out_s.x, p2.y - p_out_s.y),
+                                cv::Point2f(p_center.x - p_out_s.x, p_center.y - p_out_s.y)));
+
+                    if (d1 < d2 && d > relevant_change &&
+                        (lindex_1 - il_last_stepping) < static_step &&
+                        d2 < d_center_obj && odist1[i] != 0)
+                    {
+                        stepping   = true;
+                        first      = true;
+                        lindex_1   = lindex_2;
+                        continue;
+                    }
+                    pl_found = true;
+                    if ((lindex_1 - il_last_stepping) >= static_step)
+                    {
+                        il_found = lindex_1 + 1;
+                        break;
+                    }
+                    if (d <= relevant_change)
+                    {
+                        il_found = lindex_2 + 1;
+                        break;
+                    }
+                    if (d1 > d2)
+                        il_found = lindex_1 + 1;
+                    else
+                        il_found = lindex_2 + 1;
+                    break;
+                }
+            }
+        }
+
+        if (!pl_found)
+        {
+            il_found = il_last + 1;
+            pl_found = true;
+        }
+    }
+
+    // =====================
+    // Pie derecho
+    // =====================
+    {
+        bool stepping = false, first = true;
+        int ir_last = current_seq + 1;
+        int ir_last_stepping = 0;
+        int rindex_1 = 0, rindex_2 = 0;
+        ir_found = sure_frame2 + 1;
+        pr_found = false;
+
+        cv::Point2f p_out_s = imageToScene(cv::Point2f(right_foot[sure_frame2]));
+        cv::Point2f p_center = contourCentersScene[4]; 
+        float d_center_obj = cv::norm(p_out_s - p_center);
+
+        auto projectVector = [&](cv::Point2f v, cv::Point2f onto){
+            float dotp = v.x * onto.x + v.y * onto.y;
+            float onto_len_sq = onto.x*onto.x + onto.y*onto.y;
+            if (onto_len_sq == 0) return cv::Point2f(0,0);
+            float scale = dotp / onto_len_sq;
+            return cv::Point2f(onto.x * scale, onto.y * scale);
+        };
+        auto magnitude = [&](cv::Point2f v){
+            return sqrt(v.x*v.x + v.y*v.y);
+        };
+
+        for (int i = sure_frame2; i >= current_seq; --i)
+        {
+            if (first)
+            {
+                if (!stepping && right_step[i])
+                {
+                    stepping   = true;
+                    ir_last    = i;
+                    rindex_1   = i;
+                }
+                else if (stepping && !right_step[i])
+                {
+                    ir_last_stepping = i + 1;
+                    stepping = false;
+                    first    = false;
+                }
+            }
+            else
+            {
+                if (right_step[i])
+                {
+                    ir_last  = i;
+                    rindex_2 = i;
+
+                    cv::Point2f p1 = imageToScene(right_foot[rindex_1]);
+                    cv::Point2f p2 = imageToScene(right_foot[rindex_2]);
+                    float d  = cv::norm(p2 - p1);
+
+                    float d1 = magnitude(projectVector(
+                                cv::Point2f(p1.x - p_out_s.x, p1.y - p_out_s.y),
+                                cv::Point2f(p_center.x - p_out_s.x, p_center.y - p_out_s.y)));
+                    float d2 = magnitude(projectVector(
+                                cv::Point2f(p2.x - p_out_s.x, p2.y - p_out_s.y),
+                                cv::Point2f(p_center.x - p_out_s.x, p_center.y - p_out_s.y)));
+
+                    if (d1 < d2 && d > relevant_change &&
+                        (rindex_1 - ir_last_stepping) < static_step &&
+                        d2 < d_center_obj && odist2[i] != 0)
+                    {
+                        stepping   = true;
+                        first      = true;
+                        rindex_1   = rindex_2;
+                        continue;
+                    }
+                    pr_found = true;
+                    if ((rindex_1 - ir_last_stepping) >= static_step)
+                    {
+                        ir_found = rindex_1 + 1;
+                        break;
+                    }
+                    if (d <= relevant_change)
+                    {
+                        ir_found = rindex_2 + 1;
+                        break;
+                    }
+                    if (d1 > d2)
+                        ir_found = rindex_1 + 1;
+                    else
+                        ir_found = rindex_2 + 1;
+                    break;
+                }
+            }
+        }
+        if (!pr_found)
+        {
+            ir_found = ir_last + 1;
+            pr_found = true;
+        }
+    }
+}
+
+void ComputerVisionWeb::computeArrival(int startFrame,
+                                       int maxFrame,
+                                       int cur_objective,
+                                       int &last_arrival_frame,
+                                       int &nearest_arrival_code,
+                                       bool &is_left,
+                                       bool &real_arrival,
+                                       float &nearest_arrival_distance){
+    bool still_near_center_l = true, still_near_center_r = true;
+    bool done = false;
+    int last_real = -1;
+
+    for (int i2 = startFrame; i2 < maxFrame && !done; ++i2)
+    {
+        // Pie izquierdo
+        if (in_objective1[i2] != 5)
+        {
+            still_near_center_l = false;
+            if (left_step[i2])
+            {
+                // Si odist1[i2]==0 => intersección real
+                if (odist1[i2] == 0 && last_real != in_objective1[i2])
+                {
+                    last_arrival_frame       = i2;
+                    last_real                = nearest_arrival_code = in_objective1[i2];
+                    nearest_arrival_distance = 0;
+                    real_arrival             = true;
+                    is_left                  = true;
+                }
+                if (!real_arrival && odist1[i2] < nearest_arrival_distance)
+                {
+                    nearest_arrival_distance = odist1[i2];
+                    last_arrival_frame       = i2;
+                    nearest_arrival_code     = in_objective1[i2];
+                    is_left                  = true;
+                }
+            }
+        }
+
+        // Pie derecho
+        if (in_objective2[i2] != 5)
+        {
+            still_near_center_r = false;
+            if (right_step[i2])
+            {
+                if (odist2[i2] == 0 && last_real != in_objective2[i2])
+                {
+                    last_arrival_frame       = i2;
+                    last_real                = nearest_arrival_code = in_objective2[i2];
+                    nearest_arrival_distance = 0;
+                    real_arrival             = true;
+                    is_left                  = false;
+                }
+                if (!real_arrival && odist2[i2] < nearest_arrival_distance)
+                {
+                    nearest_arrival_distance = odist2[i2];
+                    last_arrival_frame       = i2;
+                    nearest_arrival_code     = in_objective2[i2];
+                    is_left                  = false;
+                }
+            }
+        }
+
+        // Revisar si ya regresó al centro con uno de los pies
+        if (!still_near_center_l && in_objective1[i2] == 5 && left_step[i2])
+            done = true;
+        if (!still_near_center_r && in_objective2[i2] == 5 && right_step[i2])
+            done = true;
+    }
+}
+
+bool ComputerVisionWeb::checkReturnToCenter(int startSearchFrame, int maxFrame){
+    bool still_far_center_l = true, still_far_center_r = true;
+    bool step_center = false;
+    bool ready_l = false, ready_r = false;
+
+    for (int i2 = startSearchFrame; i2 < maxFrame; ++i2)
+    {
+        if (in_objective1[i2] == 5)
+        {
+            still_far_center_l = false;
+            if (left_step[i2])
+            {
+                step_center = true;
+                break;
+            }
+        }
+        if (in_objective2[i2] == 5)
+        {
+            still_far_center_r = false;
+            if (right_step[i2])
+            {
+                step_center = true;
+                break;
+            }
+        }
+        if(!still_far_center_l && in_objective1[i2] != 5)
+            ready_l = true;
+        if(!still_far_center_r && in_objective2[i2] != 5)
+            ready_r = true;
+        if (ready_l && ready_r)
+            break;
+    }
+    return step_center;
+}
+
+string ComputerVisionWeb::buildFinalJson(const vector<Section> &sequences){
+    string json = "[\n";
+    for(size_t i = 0; i < sequences.size(); ++i)
+    {
+        const Section& sec = sequences[i];
+        json += "    {\n";
+        json += "    \"id_sequence\": " + to_string(i) + ",\n";
+        json += "    \"takeoff_frame\": " + to_string(sec.takeoff_frame) + ",\n";
+        json += "    \"arrival_frame\": " + to_string(sec.arrival_frame) + ",\n";
+        json += "    \"error\": " + string(sec.error ? "true" : "false") + "\n";
+        json += "    }";
+        if (i < sequences.size() - 1) json += ",";
+        json += "\n";
+    }
+    json += "]";
+    return json;
+}
+
+string ComputerVisionWeb::buildDetailedJson(const vector<Section> &sequences){
+    string json2 = "[\n";
+    for(size_t i = 0; i < sequences.size(); ++i)
+    {
+        const Section& sec = sequences[i];
+        json2 += "    {\n";
+        json2 += "    \"id_sequence\": " + to_string(i) + ",\n";
+        json2 += "    \"takeoff_frame\": " + to_string(sec.takeoff_frame) + ",\n";
+        json2 += "    \"arrival_frame\": " + to_string(sec.arrival_frame) + ",\n";
+        json2 += "    \"error\": " + string(sec.error ? "true" : "false") + ",\n";
+        json2 += "    \"items\": [\n";
+        for (size_t j = 0; j < sec.items.size(); ++j)
+        {
+            const item& it = sec.items[j];
+            json2 += "        {\n";
+            json2 += "        \"code\": " + to_string(it.code) + ",\n";
+            json2 += "        \"intersects\": " + to_string(it.intersects) + ",\n";
+            json2 += "        \"frame\": " + to_string(it.frame) + ",\n";
+            json2 += "        \"d_l\": " + to_string(it.d_l) + ",\n";
+            json2 += "        \"d_r\": " + to_string(it.d_r) + ",\n";
+            json2 += "        \"step_l\": " + string(it.step_l ? "true" : "false") + ",\n";
+            json2 += "        \"step_r\": " + string(it.step_r ? "true" : "false") + "\n";
+            json2 += "        }";
+            if (j < sec.items.size() - 1) json2 += ",";
+            json2 += "\n";
+        }
+        json2 += "    ]\n";
+        json2 += "    }";
+        if (i < sequences.size() - 1) json2 += ",";
+        json2 += "\n";
+    }
+    json2 += "]";
+    return json2;
 }
