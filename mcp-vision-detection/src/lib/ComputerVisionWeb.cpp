@@ -492,7 +492,7 @@ bool ComputerVisionWeb::callApi(const string& videoUrl){
     {
         // Local Docker -> "http://localhost:5000" 
         // AWS Docker -> "http://blazepose-api:5000"
-        string api_url = "http://blazepose-api-segmentation:5000/process-video";
+        string api_url = "http://blazepose-api:5000/process-video";
         // string api_url = "http://localhost:5000";
 
         string json_payload = "{\"video_url\": \"" + videoUrl + "\"}";
@@ -646,7 +646,7 @@ string ComputerVisionWeb::buildOutput(vector<MarkAndTime> sequence, int maxFrame
 
             // Asignar “take-off” al item
             if (pl_found && pr_found){
-                if (il_found < ir_found)
+                if (il_found > ir_found)
                 {
                     cur_item.code   = 5;
                     cur_item.d_l    = odist1[il_found];
@@ -1328,12 +1328,19 @@ void ComputerVisionWeb::computeArrival(int startFrame,
     bool done = false;
     int last_real = -1;
 
+    int verify_still_near_center_l = 0;
+    int verify_still_near_center_r = 0;
+
     for (int i2 = startFrame; i2 < maxFrame && !done; ++i2)
     {
         // Pie izquierdo
         if (in_objective1[i2] != 5)
         {
-            still_near_center_l = false;
+            verify_still_near_center_l += 1;
+            if (verify_still_near_center_l > 4){
+                still_near_center_l = false;
+            }
+
             if (left_step[i2])
             {
                 // Si odist1[i2]==0 => intersección real
@@ -1358,7 +1365,11 @@ void ComputerVisionWeb::computeArrival(int startFrame,
         // Pie derecho
         if (in_objective2[i2] != 5)
         {
-            still_near_center_r = false;
+            verify_still_near_center_r += 1;
+            if (verify_still_near_center_r > 4){
+                still_near_center_r = false;
+            }
+
             if (right_step[i2])
             {
                 if (odist2[i2] == 0 && last_real != in_objective2[i2])
