@@ -49,4 +49,3 @@ Podemos agrupar los archivos dentro de src/lib/* en dos categorias, en donce:
 ### Comandos utiles:
 - docker build -t vision .
 - docker run -p 3001:3001 vision
-

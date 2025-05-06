@@ -78,6 +78,7 @@ struct FrameInfo {
     std::string stepSide;
     Position left_position;
     Position right_position;
+    cv::Mat segmentation_mask;
 };
 
 std::vector<cv::Point2i> intersectConvexPolygons(std::vector<cv::Point2i> &p1, std::vector<cv::Point2i> &p2);
